@@ -82,6 +82,26 @@ class GrayScaledImage(
         return GrayScaledImage(width, height, arr, imagePixelsHandler)
     }
 
+    fun getHalfSizeImage(): GrayScaledImage {
+        val newImageArr = mutableListOf<Double>()
+
+        (0 until width).forEach { i ->
+            if (i % 2 != 0) {
+                (0 until height).forEach { j ->
+                    if (j % 2 != 0)
+                        newImageArr.add(getPixelValue(i, j))
+                }
+            }
+        }
+
+        return GrayScaledImage(
+            width / 2,
+            height / 2,
+            newImageArr.toDoubleArray(),
+            imagePixelsHandler
+        )
+    }
+
     fun getBufferedImage(): BufferedImage {
         val bufferedImage = BufferedImage(width, height, TYPE_INT_RGB)
 
