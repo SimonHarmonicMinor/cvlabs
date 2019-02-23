@@ -8,12 +8,13 @@ import java.awt.Color
 import java.awt.image.BufferedImage
 import java.awt.image.BufferedImage.TYPE_INT_RGB
 import kotlin.math.pow
+import kotlin.streams.toList
 
 class GrayScaledImage(
     val width: Int,
     val height: Int,
     private val imgArray: DoubleArray,
-    var imagePixelsHandler: ImagePixelsHandler
+    private val imagePixelsHandler: ImagePixelsHandler
 ) {
 
     private fun getPixelValue(x: Int, y: Int): Double {
@@ -29,23 +30,21 @@ class GrayScaledImage(
         val endPos = (filter.size - 1) / 2
         val startPos = endPos * -1
 
-        val arr = (0 until width).map { i ->
-            (0 until height).map { j ->
-
+        val arr = (0 until width).toList().parallelStream().map { i ->
+            (0 until height).toList().parallelStream().map { j ->
                 (startPos..endPos).flatMap { x ->
                     (startPos..endPos).map { y ->
                         val imgValue = getPixelValue(i - x, j - y)
                         imgValue * filter.getValue(x, y)
                     }
                 }.sum()
-
-            }
-        }.flatMap { x -> x.asIterable() }.toDoubleArray()
+            }.toList()
+        }.toList().flatMap { it.asIterable() }.toDoubleArray()
 
         return GrayScaledImage(width, height, arr, imagePixelsHandler)
     }
 
-    fun applyFilter(separableFilter: SeparableFilter): GrayScaledImage {
+    fun applySeparableFilter(separableFilter: SeparableFilter): GrayScaledImage {
         val endPos = (separableFilter.size - 1) / 2
         val startPos = endPos * -1
 

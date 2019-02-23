@@ -3,6 +3,7 @@ package com.kirekov.cvlabs.octaves
 import com.kirekov.cvlabs.image.GrayScaledImage
 import com.kirekov.cvlabs.image.filter.blur.GaussianFilter
 import kotlin.math.pow
+import kotlin.streams.toList
 
 class Octave(private val octaveElements: Array<OctaveElement>) : Iterable<OctaveElement> {
 
@@ -27,8 +28,8 @@ fun generateOctavesFrom(
     val deltaSigma = calculateDeltaSigma(imageSigma, sigma0)
     var startImage = image.applyFilter(GaussianFilter(deltaSigma))
 
-    (0 until octavesCount).forEach { i ->
-        val octave = generateOneOctave(shrinksCount, sigma0, startImage, k)
+    repeat((0 until octavesCount).count()) {
+        val octave = generateOneOctaveParallel(shrinksCount, sigma0, startImage, k)
         octaves.add(octave)
         startImage = octave.last().image.getHalfSizeImage()
     }
@@ -36,29 +37,33 @@ fun generateOctavesFrom(
     return octaves.toTypedArray()
 }
 
-private fun generateOneOctave(
+private fun generateOneOctaveParallel(
     shrinksCount: Int,
     sigma0: Double,
     startImage: GrayScaledImage,
     k: Double
 ): Octave {
 
-    val elementsList = mutableListOf<OctaveElement>()
-    elementsList.add(OctaveElement(startImage, sigma0))
+    val startElement = OctaveElement(startImage, sigma0)
 
-    repeat((1..shrinksCount).count()) {
-        val last = elementsList.last()
+    val oldSigma = startElement.sigma
 
-        val oldSigma = last.sigma
-        val newSigma = last.sigma * k
-        val deltaSigma = calculateDeltaSigma(oldSigma, newSigma)
+    val octavesDeferred =
+        (1..shrinksCount).toList().parallelStream().map { i ->
 
-        val newImage = last.image.applyFilter(GaussianFilter(sigma = deltaSigma))
+            val newSigma = oldSigma * k.pow(i)
+            val deltaSigma = calculateDeltaSigma(oldSigma, newSigma)
 
-        elementsList.add(OctaveElement(newImage, newSigma))
-    }
+            val newImage = startElement.image.applyFilter(GaussianFilter(sigma = deltaSigma))
 
-    return Octave(elementsList.toTypedArray())
+            OctaveElement(newImage, newSigma)
+        }
+
+    val octaveElements = mutableListOf<OctaveElement>()
+    octaveElements.add(startElement)
+    octaveElements.addAll(octavesDeferred.toList())
+
+    return Octave(octaveElements.toTypedArray())
 }
 
 private fun calculateDeltaSigma(oldSigma: Double, newSigma: Double): Double {

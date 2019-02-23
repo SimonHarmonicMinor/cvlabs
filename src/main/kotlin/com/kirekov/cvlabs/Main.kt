@@ -8,10 +8,16 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import javax.imageio.ImageIO
 
+
 fun main() = runBlocking {
-    Files.deleteIfExists(Path.of("output"))
+    Files.walk(Paths.get("output"))
+        .map { it.toFile() }
+        .sorted { o1, o2 -> -o1.compareTo(o2) }
+        .forEach { it.delete() }
+
     Files.createDirectory(Path.of("output"))
 
     val bufferedImage = ImageIO.read(File("input/img.jpg"))
@@ -21,7 +27,9 @@ fun main() = runBlocking {
         MirrorPixelsHandler()
     )
 
-    val octaves = generateOctavesFrom(4, 6, 1.0, grayScaledImage)
+    val time = System.currentTimeMillis()
+
+    val octaves = generateOctavesFrom(6, 30, 1.0, grayScaledImage)
 
     octaves.forEachIndexed { index, octave ->
 
@@ -37,4 +45,7 @@ fun main() = runBlocking {
         }
 
     }
+
+
+    println(System.currentTimeMillis() - time)
 }
