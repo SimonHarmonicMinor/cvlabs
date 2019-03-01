@@ -1,12 +1,18 @@
 package com.kirekov.cvlabs.image
 
+import com.kirekov.cvlabs.features.points.FeaturePointOperator
+import com.kirekov.cvlabs.features.points.FeaturePoints
+import com.kirekov.cvlabs.features.points.Point
 import com.kirekov.cvlabs.image.borders.ImagePixelsHandler
 import com.kirekov.cvlabs.image.filter.Filter
 import com.kirekov.cvlabs.image.filter.SeparableFilter
+import com.kirekov.cvlabs.image.filter.derivative.sobel.SobelFilter
+import com.kirekov.cvlabs.image.filter.derivative.sobel.SobelType
 import com.kirekov.cvlabs.image.normalization.normalize
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.awt.image.BufferedImage.TYPE_INT_RGB
+import java.util.*
 import kotlin.math.pow
 import kotlin.streams.toList
 
@@ -17,7 +23,7 @@ class GrayScaledImage(
     private val imagePixelsHandler: ImagePixelsHandler
 ) {
 
-    private fun getPixelValue(x: Int, y: Int): Double {
+    fun getPixelValue(x: Int, y: Int): Double {
         return imagePixelsHandler.getPixelValue(x, y, this)
     }
 
@@ -26,22 +32,25 @@ class GrayScaledImage(
     }
 
     fun applyFilter(filter: Filter): GrayScaledImage {
-
-        val endPos = (filter.size - 1) / 2
-        val startPos = endPos * -1
-
         val arr = (0 until width).toList().parallelStream().map { i ->
             (0 until height).toList().parallelStream().map { j ->
-                (startPos..endPos).flatMap { x ->
-                    (startPos..endPos).map { y ->
-                        val imgValue = getPixelValue(i - x, j - y)
-                        imgValue * filter.getValue(x, y)
-                    }
-                }.sum()
+                applyFilterToPoint(filter, i, j)
             }.toList()
         }.toList().flatMap { it.asIterable() }.toDoubleArray()
 
         return GrayScaledImage(width, height, arr, imagePixelsHandler)
+    }
+
+    private fun applyFilterToPoint(filter: Filter, i: Int, j: Int): Double {
+        val endPos = (filter.size - 1) / 2
+        val startPos = endPos * -1
+
+        return (startPos..endPos).flatMap { x ->
+            (startPos..endPos).map { y ->
+                val imgValue = getPixelValue(i - x, j - y)
+                imgValue * filter.getValue(x, y)
+            }
+        }.sum()
     }
 
     fun applySeparableFilter(separableFilter: SeparableFilter): GrayScaledImage {
@@ -61,6 +70,47 @@ class GrayScaledImage(
         }.flatMap { x -> x.asIterable() }.toDoubleArray()
 
         return GrayScaledImage(width, height, arr, imagePixelsHandler)
+    }
+
+    fun applyMoravecOperator(featurePointOperator: FeaturePointOperator): FeaturePoints {
+        val offsetList = listOf(-featurePointOperator.offset, 0, featurePointOperator.offset)
+
+        val pointsValues = (0 until width).toList().parallelStream().flatMap { i ->
+            (0 until height).toList().parallelStream().map { j ->
+                val middleImgValue = getPixelValue(i, j)
+                val sum = offsetList.flatMap { x ->
+                    offsetList.map { y ->
+                        val imgValue = getPixelValue(i - x, j - y)
+                        (middleImgValue - imgValue).pow(2)
+                    }
+                }.sum()
+                Triple(i, j, sum)
+            }.filter { x -> x.third > featurePointOperator.threshold }
+        }.toList()
+            .map { Optional.ofNullable(it).map { v -> Point(v.first, v.second) }.get() }
+            .toTypedArray()
+        return FeaturePoints(width, height, pointsValues)
+    }
+
+    fun applyHarrisOperator(featurePointOperator: FeaturePointOperator): FeaturePoints {
+        val offset = featurePointOperator.offset
+        val offsetList = listOf(-featurePointOperator.offset, 0, featurePointOperator.offset)
+
+        val pointsValues = (0 until width).toList().parallelStream().flatMap { i ->
+            (0 until height).toList().parallelStream().map { j ->
+                val imgValue = getPixelValue(i, j)
+                val xDerivative = applyFilterToPoint(SobelFilter(SobelType.X), i, j)
+                val yDerivative = applyFilterToPoint(SobelFilter(SobelType.Y), i, j)
+
+                val sum = (offset * xDerivative + offset * yDerivative).pow(2)
+
+                Triple(i, j, sum)
+            }.filter { x -> x.third > featurePointOperator.threshold }
+        }.toList()
+            .map { Optional.ofNullable(it).map { v -> Point(v.first, v.second) }.get() }
+            .toTypedArray()
+
+        return FeaturePoints(width, height, pointsValues)
     }
 
     fun sumImagesBySquare(image: GrayScaledImage): GrayScaledImage {
@@ -112,6 +162,20 @@ class GrayScaledImage(
                 val color = Color(pixelValue.toInt(), pixelValue.toInt(), pixelValue.toInt())
                 bufferedImage.setRGB(i, j, color.rgb)
             }
+        }
+
+        return bufferedImage
+    }
+
+    fun getBufferedImage(featurePoints: FeaturePoints): BufferedImage {
+        if (featurePoints.imageHeight != height || featurePoints.imageWidth != width) {
+            throw IllegalArgumentException("Высота и ширина должны совпадать")
+        }
+
+        val bufferedImage = getBufferedImage()
+        for (i in 0 until featurePoints.size) {
+            val point = featurePoints.getPoint(i)
+            bufferedImage.setRGB(point.x, point.y, Color.RED.rgb)
         }
 
         return bufferedImage

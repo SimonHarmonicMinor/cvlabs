@@ -1,24 +1,54 @@
 package com.kirekov.cvlabs
 
+import com.kirekov.cvlabs.features.points.FeaturePointOperator
 import com.kirekov.cvlabs.image.borders.MirrorPixelsHandler
 import com.kirekov.cvlabs.image.grayscaling.bufferedImageToGrayScaledImage
 import com.kirekov.cvlabs.image.grayscaling.method.HdtvScaling
 import com.kirekov.cvlabs.octaves.generateOctavesFrom
+import com.kirekov.cvlabs.octaves.getPixelValueFromOctaves
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.nio.file.Files
-import java.nio.file.Path
 import java.nio.file.Paths
 import javax.imageio.ImageIO
 
 
-fun main() = runBlocking {
+fun main() {
+    octaves()
+    //featurePoints()
+}
+
+fun featurePoints() {
+    val bufferedImage = ImageIO.read(File("input/img.jpg"))
+    val grayScaledImage = bufferedImageToGrayScaledImage(
+        bufferedImage,
+        HdtvScaling(),
+        MirrorPixelsHandler()
+    )
+    val featurePoints = grayScaledImage.applyMoravecOperator(FeaturePointOperator(1, 0.1))
+    val featurePoints2 = grayScaledImage.applyHarrisOperator(FeaturePointOperator(1, 0.1))
+    ImageIO
+        .write(
+            grayScaledImage
+                .getBufferedImage(featurePoints),
+            "jpg",
+            File("output.jpg")
+        )
+    ImageIO
+        .write(
+            grayScaledImage
+                .getBufferedImage(featurePoints2),
+            "jpg",
+            File("output1.jpg")
+        )
+}
+
+fun octaves() = runBlocking {
     Files.walk(Paths.get("output"))
         .map { it.toFile() }
         .sorted { o1, o2 -> -o1.compareTo(o2) }
         .forEach { it.delete() }
-
-    Files.createDirectory(Path.of("output"))
+    Files.createDirectory(Paths.get("output"))
 
     val bufferedImage = ImageIO.read(File("input/img.jpg"))
     val grayScaledImage = bufferedImageToGrayScaledImage(
@@ -29,23 +59,34 @@ fun main() = runBlocking {
 
     val time = System.currentTimeMillis()
 
-    val octaves = generateOctavesFrom(6, 30, 1.0, grayScaledImage)
+    val octaves = generateOctavesFrom(6, 5, 2.0, grayScaledImage)
+
+    val folderPath = "output"
+    if (!Files.exists(Paths.get(folderPath)))
+        Files.createDirectory(Paths.get(folderPath))
 
     octaves.forEachIndexed { index, octave ->
-
-        val folderPath = "output/octave$index"
-        if (!Files.exists(Path.of(folderPath)))
-            Files.createDirectory(Path.of(folderPath))
 
         octave.forEachIndexed { elIndex, element ->
             ImageIO.write(
                 element.image.getBufferedImage(),
-                "jpg", File("$folderPath/img$elIndex.jpg")
+                "jpg",
+                File(
+                    "$folderPath/octave_${index}_img_${elIndex}_local_${element.localSigma.format(2)}_global_${element.globalSigma.format(
+                        2
+                    )}.jpg"
+                )
             )
         }
 
     }
 
 
+    getPixelValueFromOctaves(octaves, 600, 600, 12.0)
+
     println(System.currentTimeMillis() - time)
+}
+
+private fun Double.format(digits: Int): String {
+    return java.lang.String.format("%.${digits}f", this)
 }
