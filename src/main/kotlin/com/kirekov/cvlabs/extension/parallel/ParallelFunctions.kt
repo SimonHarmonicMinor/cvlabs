@@ -1,4 +1,4 @@
-package com.kirekov.cvlabs.parallel
+package com.kirekov.cvlabs.extension.parallel
 
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope

@@ -1,3 +1,9 @@
 package com.kirekov.cvlabs.features.points
 
-data class Point(val x: Int, val y: Int)
+import kotlin.math.pow
+
+data class Point(val x: Int, val y: Int, val value: Double) {
+    fun distance(point: Point): Double {
+        return Math.sqrt((x - point.x.toDouble()).pow(2) + (y - point.y.toDouble()).pow(2))
+    }
+}

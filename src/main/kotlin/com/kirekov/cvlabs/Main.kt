@@ -14,32 +14,27 @@ import javax.imageio.ImageIO
 
 
 fun main() {
-    octaves()
-    //featurePoints()
+    //octaves()
+    featurePoints()
 }
 
 fun featurePoints() {
-    val bufferedImage = ImageIO.read(File("input/img.jpg"))
+    val bufferedImage = ImageIO.read(File("input/img2.jpg"))
     val grayScaledImage = bufferedImageToGrayScaledImage(
         bufferedImage,
         HdtvScaling(),
         MirrorPixelsHandler()
     )
-    val featurePoints = grayScaledImage.applyMoravecOperator(FeaturePointOperator(1, 0.1))
-    val featurePoints2 = grayScaledImage.applyHarrisOperator(FeaturePointOperator(1, 0.1))
+    val featurePoints =
+        grayScaledImage
+            .applyHarrisOperator(FeaturePointOperator(5, 1, 0.1))
+            .filterByAdaptiveNonMaximumSuppression(1000)
     ImageIO
         .write(
             grayScaledImage
                 .getBufferedImage(featurePoints),
             "jpg",
-            File("output.jpg")
-        )
-    ImageIO
-        .write(
-            grayScaledImage
-                .getBufferedImage(featurePoints2),
-            "jpg",
-            File("output1.jpg")
+            File("output2.jpg")
         )
 }
 
