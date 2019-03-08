@@ -1,6 +1,7 @@
 package com.kirekov.cvlabs
 
-import com.kirekov.cvlabs.features.points.FeaturePointOperator
+import com.kirekov.cvlabs.features.points.EigenValuesMethod
+import com.kirekov.cvlabs.features.points.ofHarris
 import com.kirekov.cvlabs.image.borders.MirrorPixelsHandler
 import com.kirekov.cvlabs.image.grayscaling.bufferedImageToGrayScaledImage
 import com.kirekov.cvlabs.image.grayscaling.method.HdtvScaling
@@ -12,29 +13,28 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import javax.imageio.ImageIO
 
-
 fun main() {
     //octaves()
-    featurePoints()
+    featurePointsCalc()
 }
 
-fun featurePoints() {
-    val bufferedImage = ImageIO.read(File("input/img2.jpg"))
+fun featurePointsCalc() {
+    val bufferedImage = ImageIO.read(File("input/img3.jpg"))
     val grayScaledImage = bufferedImageToGrayScaledImage(
         bufferedImage,
         HdtvScaling(),
         MirrorPixelsHandler()
     )
+
     val featurePoints =
-        grayScaledImage
-            .applyHarrisOperator(FeaturePointOperator(5, 1, 0.1))
-            .filterByAdaptiveNonMaximumSuppression(1000)
+        ofHarris(7, 0.3, grayScaledImage, EigenValuesMethod())
+            .calculate()
     ImageIO
         .write(
             grayScaledImage
-                .getBufferedImage(featurePoints),
+                .getBufferedImage(featurePoints.filterByAdaptiveNonMaximumSuppression(50)),
             "jpg",
-            File("output2.jpg")
+            File("output3_harris_max_1.jpg")
         )
 }
 

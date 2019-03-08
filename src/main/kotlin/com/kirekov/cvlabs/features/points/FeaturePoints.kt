@@ -1,8 +1,6 @@
 package com.kirekov.cvlabs.features.points
 
-import java.util.*
-import java.util.stream.Collectors
-import kotlin.streams.toList
+import com.kirekov.cvlabs.image.GrayScaledImage
 
 class FeaturePoints(val imageWidth: Int, val imageHeight: Int, private val coordinates: Array<Point>) {
 
@@ -13,35 +11,45 @@ class FeaturePoints(val imageWidth: Int, val imageHeight: Int, private val coord
     }
 
     fun filterByAdaptiveNonMaximumSuppression(count: Int): FeaturePoints {
-        val newCoordinates = coordinates.toMutableList()
+        val newCoordinates = coordinates.sortedByDescending { it.value }.toMutableList()
         var r = 0.9
-
-        fun getNearbyPoints(coordinates: MutableList<Point>, index: Int, r: Double)
-                : Collection<Point> {
-            val point = coordinates[index]
-            val nearByPoints = (0 until coordinates.size).toList().parallelStream().map { i ->
-                if (coordinates[i].distance(point) <= r && coordinates[i].value > point.value) {
-                    coordinates[i]
-                } else {
-                    null
+        while (newCoordinates.size > count) {
+            val pointsToRemove = mutableListOf<Point>()
+            for (i in 0 until newCoordinates.size) {
+                val point = newCoordinates[i]
+                for (j in i + 1 until newCoordinates.size) {
+                    if (newCoordinates[j].distance(point) <= r) {
+                        pointsToRemove.add(point)
+                        break
+                    }
                 }
             }
-                .filter { it != null }
-                .map { Optional.ofNullable(it).map { x -> x as Point }.get() }
-                .toList()
-            return nearByPoints
-        }
-
-        while (newCoordinates.size > count) {
-            val pointsToRemove = (0 until newCoordinates.size).toList().parallelStream().flatMap { i ->
-                getNearbyPoints(newCoordinates, i, r).toList().stream()
-            }.collect(Collectors.toSet())
-
             newCoordinates.removeAll(pointsToRemove)
             r += 0.9
         }
+
+        Int
 
         return FeaturePoints(imageWidth, imageHeight, newCoordinates.toTypedArray())
     }
 
 }
+
+fun ofMorravec(
+    size: Int,
+    offset: Int,
+    threshold: Double,
+    image: GrayScaledImage
+): FeaturePointsCalculator {
+    return MorravecCalculator(size, offset, threshold, image)
+}
+
+fun ofHarris(
+    size: Int,
+    threshold: Double,
+    image: GrayScaledImage,
+    harrisCalculationMethod: HarrisCalculationMethod
+): FeaturePointsCalculator {
+    return HarrisCalculator(size, threshold, image, harrisCalculationMethod)
+}
+
