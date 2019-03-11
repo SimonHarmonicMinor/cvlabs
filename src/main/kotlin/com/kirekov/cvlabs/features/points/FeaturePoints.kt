@@ -2,7 +2,15 @@ package com.kirekov.cvlabs.features.points
 
 import com.kirekov.cvlabs.image.GrayScaledImage
 
-class FeaturePoints(val imageWidth: Int, val imageHeight: Int, private val coordinates: Array<Point>) {
+class FeaturePoints(
+    val imageWidth: Int,
+    val imageHeight: Int,
+    private val coordinates: Array<Point>
+) : Iterable<Point> {
+
+    override fun iterator(): Iterator<Point> {
+        return coordinates.iterator()
+    }
 
     val size = coordinates.size
 
@@ -28,28 +36,27 @@ class FeaturePoints(val imageWidth: Int, val imageHeight: Int, private val coord
             r += 0.9
         }
 
-        Int
-
         return FeaturePoints(imageWidth, imageHeight, newCoordinates.toTypedArray())
     }
 
-}
+    companion object {
+        fun ofMorravec(
+            size: Int,
+            offset: Int,
+            threshold: Double,
+            image: GrayScaledImage
+        ): FeaturePointsCalculator {
+            return MorravecCalculator(size, offset, threshold, image)
+        }
 
-fun ofMorravec(
-    size: Int,
-    offset: Int,
-    threshold: Double,
-    image: GrayScaledImage
-): FeaturePointsCalculator {
-    return MorravecCalculator(size, offset, threshold, image)
-}
+        fun ofHarris(
+            size: Int,
+            threshold: Double,
+            image: GrayScaledImage,
+            harrisCalculationMethod: HarrisCalculationMethod
+        ): FeaturePointsCalculator {
+            return HarrisCalculator(size, threshold, image, harrisCalculationMethod)
+        }
+    }
 
-fun ofHarris(
-    size: Int,
-    threshold: Double,
-    image: GrayScaledImage,
-    harrisCalculationMethod: HarrisCalculationMethod
-): FeaturePointsCalculator {
-    return HarrisCalculator(size, threshold, image, harrisCalculationMethod)
 }
-

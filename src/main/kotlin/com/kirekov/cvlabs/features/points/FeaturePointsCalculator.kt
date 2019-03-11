@@ -70,7 +70,7 @@ class HarrisCalculator(
     override fun calculate(): FeaturePoints {
         val gaussianFilter = GaussianFilter(size)
         val pointsValues = (0 until image.width).toList().parallelStream().flatMap { i ->
-            (0 until image.height).toList().stream().map { j ->
+            (0 until image.height).toList().parallelStream().map { j ->
                 val pointResult = applyHarrisToPoint(i, j, gaussianFilter)
                 val a = pointResult.first
                 val b = pointResult.second

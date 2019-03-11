@@ -5,7 +5,7 @@ import com.kirekov.cvlabs.image.filter.SeparableFilter
 class SobelFilter(sobelType: SobelType) : SeparableFilter {
 
     private val filterArray: Array<Array<Int>> =
-        if (sobelType == SobelType.X)
+        if (sobelType == SobelType.Y)
             arrayOf(
                 arrayOf(1, 0, -1),
                 arrayOf(2, 0, -2),
