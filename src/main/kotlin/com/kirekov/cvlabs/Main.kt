@@ -28,7 +28,7 @@ fun main() {
         MirrorPixelsHandler()
     )
 
-    val bufferedImage2 = ImageIO.read(File("input/lena_angle.jpg"))
+    val bufferedImage2 = ImageIO.read(File("input/lena_180.jpg"))
     val grayScaledImage2 = bufferedImageToGrayScaledImage(
         bufferedImage2,
         HdtvScaling(),
@@ -40,8 +40,23 @@ fun main() {
         .write(
             image,
             "jpg",
-            File("output3_1.jpg")
+            File("output3_4.jpg")
         )
+
+
+    /*ImageIO.write(
+        grayScaledImage1
+            .applyFilter(SobelFilter(SobelType.X)).getBufferedImage(),
+        "jpg",
+        File("x.jpg")
+    )
+
+    ImageIO.write(
+        grayScaledImage1
+            .applyFilter(SobelFilter(SobelType.Y)).getBufferedImage(),
+        "jpg",
+        File("y.jpg")
+    )*/
 
     println(System.currentTimeMillis() - time)
 }
@@ -74,7 +89,7 @@ fun descriptors(
         grayScaledImage1,
         featurePoints1,
         3,
-        9,
+        3,
         8
     )
 
@@ -82,7 +97,7 @@ fun descriptors(
         grayScaledImage2,
         featurePoints2,
         3,
-        9,
+        3,
         8
     )
 

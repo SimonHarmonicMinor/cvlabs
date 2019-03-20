@@ -27,7 +27,12 @@ class GrayScaledImage(
 ) {
 
     fun getPixelValue(x: Int, y: Int): Double {
-        return imagePixelsHandler.getPixelValue(x, y, this)
+        try {
+            return imagePixelsHandler.getPixelValue(x, y, this)
+        } catch (ex: Exception) {
+            throw Exception()
+        }
+
     }
 
     fun getPixelValue(index: Int): Double {
@@ -204,7 +209,7 @@ class GrayScaledImage(
                     minimum.descriptor.point,
                     minimum.distance / nextAfter.distance
                 )
-            }.filter { it.value < 0.8 }
+            }.filter { it.value < 0.9 }
                 .map { Optional.ofNullable(it).get() }
                 .toList()
 

@@ -3,12 +3,11 @@ package com.kirekov.cvlabs.features.points.descriptors
 import com.kirekov.cvlabs.features.points.FeaturePoints
 import com.kirekov.cvlabs.features.points.Point
 import com.kirekov.cvlabs.image.GrayScaledImage
-import com.kirekov.cvlabs.image.filter.Filter
 import com.kirekov.cvlabs.image.filter.blur.GaussianFilter
 import com.kirekov.cvlabs.image.filter.derivative.sobel.SobelFilter
 import com.kirekov.cvlabs.image.filter.derivative.sobel.SobelType
 import com.kirekov.cvlabs.image.normalization.normalizeVector
-import kotlin.math.pow
+import kotlin.math.*
 import kotlin.streams.toList
 
 
@@ -41,9 +40,20 @@ class ImageDescriptors(
             .subList(0, count)
     }
 
+
     data class DescriptorAndDistance(val descriptor: Descriptor, val distance: Double)
 
     companion object {
+
+        private fun normalizeAngle(angle: Double): Double {
+            var resultAngle = angle
+            while (resultAngle < 0)
+                resultAngle += 2 * PI
+            while (resultAngle >= 2 * PI)
+                resultAngle -= 2 * PI
+            return resultAngle
+        }
+
         fun of(
             image: GrayScaledImage,
             featurePoints: FeaturePoints,
@@ -54,6 +64,7 @@ class ImageDescriptors(
             if (windowSize % 2 == 0 || smallWindowSize % 2 == 0)
                 throw IllegalArgumentException("Размер окон не может быть четным")
 
+
             val xDerivative = image.applyFilter(SobelFilter(SobelType.X))
             val yDerivative = image.applyFilter(SobelFilter(SobelType.Y))
 
@@ -61,49 +72,98 @@ class ImageDescriptors(
                 Math.sqrt(x.pow(2) + y.pow(2))
             }
             val gradientAngles = xDerivative.mapImages(yDerivative) { x, y ->
-                Math.atan2(y, x)
+                normalizeAngle(Math.atan2(y, x))
             }
 
             val wholeSize = windowSize * smallWindowSize
             val gaussianFilter = GaussianFilter(wholeSize)
 
-            val endPos = (windowSize - 1) / 2
-            val startPos = endPos * -1
+
+            val step = Math.PI * 2 / (histogramSize - 1)
+            val angles = (0 until histogramSize).map {
+                it * step
+            }.toDoubleArray()
 
             val descriptors = featurePoints.toList().stream().map { point ->
-                val histograms = (startPos..endPos).flatMap { i ->
-                    (startPos..endPos).map { j ->
-                        calculateHistogramOfSmallWindow(
-                            point.x + i * smallWindowSize,
-                            point.y + j * smallWindowSize,
-                            histogramSize,
-                            gaussianFilter,
-                            i * smallWindowSize,
-                            j * smallWindowSize,
-                            smallWindowSize,
-                            gradientValues,
-                            gradientAngles
-                        ).normalize()
+
+                val turnAngles = calculateAreaOrientationAngle(
+                    point.x,
+                    point.y,
+                    gaussianFilter,
+                    gradientValues,
+                    36
+                )
+
+                val histogramsBuilders =
+                    (0 until windowSize).map {
+                        (0 until windowSize).map {
+                            HistogramBuilder(angles)
+                        }
+                    }
+
+                val halfSize = (wholeSize - 1) / 2
+
+                (-halfSize..halfSize).forEach { i ->
+                    (-halfSize..halfSize).forEach { j ->
+                        turnAngles.forEach { turnAngle ->
+
+                            val newI = (i * cos(turnAngle) + j * sin(turnAngle))
+                                .roundToInt()
+                            val newJ = (j * cos(turnAngle) - i * sin(turnAngle))
+                                .roundToInt()
+
+                            if (newI in (-halfSize..halfSize) && newJ in (-halfSize..halfSize)) {
+                                val gradientValue =
+                                    gradientValues.getPixelValue(
+                                        point.x + i,
+                                        point.y + j
+                                    )
+
+                                val gradientValueBlur = gradientValue *
+                                        gaussianFilter
+                                            .getValue(
+                                                newI,
+                                                newJ
+                                            )
+
+                                val gradientAngle = normalizeAngle(
+                                    gradientAngles
+                                        .getPixelValue(
+                                            point.x + i,
+                                            point.y + j
+                                        ) - turnAngle
+                                )
+
+                                val hIndexI = (newI + halfSize) / smallWindowSize
+                                val hIndexJ = (newJ + halfSize) / smallWindowSize
+
+
+                                histogramsBuilders[hIndexI][hIndexJ]
+                                    .addGradient(gradientValueBlur, gradientAngle)
+                            }
+                        }
+
                     }
                 }
-                Descriptor(histograms, point)
+
+
+                Descriptor(
+                    histogramsBuilders
+                        .flatMap { it.map { h -> h.build() } },
+                    point
+                ).normalize()
             }.toList()
             return ImageDescriptors(image, descriptors)
         }
 
-        private fun calculateHistogramOfSmallWindow(
+        private fun calculateAreaOrientationAngle(
             i: Int,
             j: Int,
-            histogramSize: Int,
-            filter: Filter,
-            subFilterX: Int,
-            subFilterY: Int,
-            subFilterSize: Int,
+            gaussianFilter: GaussianFilter,
             gradientValues: GrayScaledImage,
-            gradientAngles: GrayScaledImage
-        ): Histogram {
-            val endPos = (subFilterSize - 1) / 2
-            val startPos = endPos * -1
+            histogramSize: Int
+        ): List<Double> {
+            val areaSize = gaussianFilter.size
 
             val step = Math.PI * 2 / (histogramSize - 1)
             val angles = (0 until histogramSize).map {
@@ -112,20 +172,44 @@ class ImageDescriptors(
 
             val histogramBuilder = HistogramBuilder(angles)
 
-            val pairs = (startPos..endPos).toList().stream().flatMap { x ->
-                (startPos..endPos).toList().stream().map { y ->
-                    val gradientValue =
-                        gradientValues.getPixelValue(i + x, j + y) *
-                                filter.getValue(subFilterX + x, subFilterY + y)
-                    val gradientAngle = gradientAngles.getPixelValue(i + x, j + y)
-                    Pair(gradientValue, gradientAngle)
+            val halfSize = (areaSize - 1) / 2
+
+            val pairs = (-halfSize..halfSize).flatMap { x ->
+                (-halfSize..halfSize).map { y ->
+                    val xDerivativeSubtraction =
+                        gradientValues.getPixelValue(i + x + 1, j + y) -
+                                gradientValues.getPixelValue(i + x - 1, j + y)
+
+                    val yDerivativeSubtraction =
+                        gradientValues.getPixelValue(i + x, j + y + 1) -
+                                gradientValues.getPixelValue(i + x, j + y - 1)
+
+                    val magnitude =
+                        Math.sqrt(
+                            xDerivativeSubtraction.pow(2) +
+                                    yDerivativeSubtraction.pow(2)
+                        ) * gaussianFilter.getValue(
+                            x,
+                            y
+                        )
+
+                    val teta = normalizeAngle(
+                        Math.atan2(
+                            yDerivativeSubtraction,
+                            xDerivativeSubtraction
+                        )
+                    )
+
+                    Pair(magnitude, teta)
                 }
             }
 
             pairs.forEach { histogramBuilder.addGradient(it.first, it.second) }
-
-            return histogramBuilder.build()
+            return histogramBuilder
+                .build()
+                .getTwoHighestAngles()
         }
+
     }
 }
 
