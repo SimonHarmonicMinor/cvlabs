@@ -1,5 +1,6 @@
 package com.kirekov.cvlabs
 
+import com.kirekov.cvlabs.extension.ThreadPool
 import com.kirekov.cvlabs.features.points.EigenValuesMethod
 import com.kirekov.cvlabs.features.points.FeaturePoints
 import com.kirekov.cvlabs.features.points.descriptors.EuclidDistance
@@ -8,8 +9,10 @@ import com.kirekov.cvlabs.image.GrayScaledImage
 import com.kirekov.cvlabs.image.borders.MirrorPixelsHandler
 import com.kirekov.cvlabs.image.grayscaling.bufferedImageToGrayScaledImage
 import com.kirekov.cvlabs.image.grayscaling.method.HdtvScaling
+import com.kirekov.cvlabs.octaves.Blob
 import com.kirekov.cvlabs.octaves.generateOctavesFrom
-import com.kirekov.cvlabs.octaves.getPixelValueFromOctaves
+import com.kirekov.cvlabs.octaves.octavesToLaplassian
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import java.awt.image.BufferedImage
 import java.io.File
@@ -18,45 +21,28 @@ import java.nio.file.Paths
 import javax.imageio.ImageIO
 
 fun main() {
-    //octaves()
-    //featurePointsCalc()
     val time = System.currentTimeMillis()
-    val bufferedImage1 = ImageIO.read(File("input/lena.jpg"))
+
+    /*val bufferedImage1 = ImageIO.read(File("input/lena.jpg"))
+    val bufferedImage2 = ImageIO.read(File("input/lena_stretched.jpg"))
+
     val grayScaledImage1 = bufferedImageToGrayScaledImage(
         bufferedImage1,
         HdtvScaling(),
         MirrorPixelsHandler()
     )
 
-    val bufferedImage2 = ImageIO.read(File("input/lena_180.jpg"))
     val grayScaledImage2 = bufferedImageToGrayScaledImage(
         bufferedImage2,
         HdtvScaling(),
         MirrorPixelsHandler()
     )
-    val image = descriptors(grayScaledImage1, grayScaledImage2)
 
-    ImageIO
-        .write(
-            image,
-            "jpg",
-            File("output3_4.jpg")
-        )
+    val buf = descriptors(grayScaledImage1, grayScaledImage2)
 
+    ImageIO.write(buf, "jpg", File("output2.jpg"))*/
+    octaves()
 
-    /*ImageIO.write(
-        grayScaledImage1
-            .applyFilter(SobelFilter(SobelType.X)).getBufferedImage(),
-        "jpg",
-        File("x.jpg")
-    )
-
-    ImageIO.write(
-        grayScaledImage1
-            .applyFilter(SobelFilter(SobelType.Y)).getBufferedImage(),
-        "jpg",
-        File("y.jpg")
-    )*/
 
     println(System.currentTimeMillis() - time)
 }
@@ -69,7 +55,7 @@ fun descriptors(
     val featurePoints1 =
         FeaturePoints.ofHarris(
             7,
-            0.3,
+            0.005,
             grayScaledImage1,
             EigenValuesMethod()
         ).calculate()
@@ -78,7 +64,7 @@ fun descriptors(
     val featurePoints2 =
         FeaturePoints.ofHarris(
             7,
-            0.3,
+            0.005,
             grayScaledImage2,
             EigenValuesMethod()
         ).calculate()
@@ -88,17 +74,17 @@ fun descriptors(
     val imageDescriptors1 = ImageDescriptors.of(
         grayScaledImage1,
         featurePoints1,
-        3,
-        3,
-        8
+        16,
+        4,
+        10
     )
 
     val imageDescriptors2 = ImageDescriptors.of(
         grayScaledImage2,
         featurePoints2,
-        3,
-        3,
-        8
+        16,
+        4,
+        10
     )
 
     val image = GrayScaledImage
@@ -135,49 +121,139 @@ fun featurePointsCalc() {
 }
 
 fun octaves() = runBlocking {
+
+    val time = System.currentTimeMillis()
+
     Files.walk(Paths.get("output"))
         .map { it.toFile() }
         .sorted { o1, o2 -> -o1.compareTo(o2) }
         .forEach { it.delete() }
     Files.createDirectory(Paths.get("output"))
 
-    val bufferedImage = ImageIO.read(File("input/img.jpg"))
-    val grayScaledImage = bufferedImageToGrayScaledImage(
-        bufferedImage,
+    val bufferedImage1 = ImageIO.read(File("input/buttefly.jpg"))
+    val grayScaledImage1 = bufferedImageToGrayScaledImage(
+        bufferedImage1,
         HdtvScaling(),
         MirrorPixelsHandler()
     )
 
-    val time = System.currentTimeMillis()
+    val bufferedImage2 = ImageIO.read(File("input/buttefly_1.3.jpg"))
+    val grayScaledImage2 = bufferedImageToGrayScaledImage(
+        bufferedImage2,
+        HdtvScaling(),
+        MirrorPixelsHandler()
+    )
 
-    val octaves = generateOctavesFrom(6, 5, 2.0, grayScaledImage)
+    val descriptors1 = async(ThreadPool.pool) {
+        println("enter image1 thread")
+        val octaves1 = generateOctavesFrom(
+            3,
+            4,
+            1.6,
+            grayScaledImage1,
+            overheadSize = 3
+        )
 
+        val laplassianOctaves1 = octavesToLaplassian(octaves1)
+
+        val blobs1 = Blob.of(laplassianOctaves1)
+
+        /*ImageIO
+            .write(
+                grayScaledImage1.getBufferedImage(blobs1),
+                "jpg",
+                File("blobs1.jpg")
+            )*/
+        Pair(blobs1, laplassianOctaves1)
+        val descriptors1 = Blob.calculateDescriptors(
+            blobs1,
+            octaves1.map { it.overheadToOctaveElements() }
+        )
+        println("exit image1 thread")
+        Pair(descriptors1, blobs1)
+    }
+
+
+    val descriptors2 = async(ThreadPool.pool) {
+        println("enter image2 thread")
+        val octaves2 = generateOctavesFrom(
+            3,
+            4,
+            1.6,
+            grayScaledImage2,
+            overheadSize = 3
+        )
+
+        val laplassianOctaves2 = octavesToLaplassian(octaves2)
+
+        val blobs2 = Blob.of(laplassianOctaves2)
+
+        /*ImageIO
+            .write(
+                grayScaledImage2.getBufferedImage(blobs2),
+                "jpg",
+                File("blobs2.jpg")
+            )*/
+        blobs2
+        val descriptors2 = Blob.calculateDescriptors(
+            blobs2,
+            octaves2.map { it.overheadToOctaveElements() }
+        )
+        println("exit image2 thread")
+        Pair(descriptors2, blobs2)
+    }
+
+
+    val image = GrayScaledImage
+        .combineImagesByDescriptors(
+            grayScaledImage1,
+            ImageDescriptors(grayScaledImage1, descriptors1.await().first),
+            grayScaledImage2,
+            ImageDescriptors(grayScaledImage2, descriptors2.await().first),
+            EuclidDistance()
+        )
+
+    ImageIO
+        .write(
+            grayScaledImage1.getBufferedImage(descriptors1.await().second),
+            "jpg",
+            File("blobs1.jpg")
+        )
+
+    ImageIO
+        .write(
+            grayScaledImage2.getBufferedImage(descriptors2.await().second),
+            "jpg",
+            File("blobs2.jpg")
+        )
+
+    ImageIO
+        .write(
+            image,
+            "jpg",
+            File("blobs-connected.jpg")
+        )
+
+/*
     val folderPath = "output"
     if (!Files.exists(Paths.get(folderPath)))
         Files.createDirectory(Paths.get(folderPath))
 
-    octaves.forEachIndexed { index, octave ->
+    descriptors1.await().second.forEachIndexed { index, octave ->
 
         octave.forEachIndexed { elIndex, element ->
             ImageIO.write(
                 element.image.getBufferedImage(),
                 "jpg",
                 File(
-                    "$folderPath/octave_${index}_img_${elIndex}_local_${element.localSigma.format(2)}_global_${element.globalSigma.format(
-                        2
-                    )}.jpg"
+                    "$folderPath/octave_${index}_img_${elIndex}_local_${element.localSigma}_global_${element.globalSigma}.jpg"
                 )
             )
         }
 
-    }
+    }*/
 
-
-    getPixelValueFromOctaves(octaves, 600, 600, 12.0)
 
     println(System.currentTimeMillis() - time)
 }
 
-private fun Double.format(digits: Int): String {
-    return java.lang.String.format("%.${digits}f", this)
-}

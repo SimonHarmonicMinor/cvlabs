@@ -15,13 +15,11 @@ fun bufferedImageToGrayScaledImage(
 ): GrayScaledImage {
 
     val pixels =
-        (0 until image.width).map { i ->
+        (0 until image.width).flatMap { i ->
             (0 until image.height).map { j ->
                 rgbToGrayScale.convert(image.getRGB(i, j))
             }
-        }.flatMap { x -> x.asIterable() }
-            .normalize(0.0, 1.0)
-            .toDoubleArray()
+        }.normalize(0.0, 1.0)
 
 
     return GrayScaledImage(

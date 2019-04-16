@@ -7,15 +7,15 @@ class SobelFilter(sobelType: SobelType) : SeparableFilter {
     private val filterArray: Array<Array<Int>> =
         if (sobelType == SobelType.Y)
             arrayOf(
-                arrayOf(1, 0, -1),
-                arrayOf(2, 0, -2),
-                arrayOf(1, 0, -1)
+                arrayOf(-1, 0, 1),
+                arrayOf(-2, 0, 2),
+                arrayOf(-1, 0, 1)
             )
         else
             arrayOf(
-                arrayOf(1, 2, 1),
+                arrayOf(-1, -2, -1),
                 arrayOf(0, 0, 0),
-                arrayOf(-1, -2, -1)
+                arrayOf(1, 2, 1)
             )
     private val verticalFilter: DoubleArray
     private val horizontalFilter: DoubleArray

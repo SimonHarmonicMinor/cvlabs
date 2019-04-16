@@ -1,11 +1,12 @@
 package com.kirekov.cvlabs.features.points
 
 import com.kirekov.cvlabs.image.GrayScaledImage
+import com.kirekov.cvlabs.image.filter.blur.GaussianFilter
 
 class FeaturePoints(
     val imageWidth: Int,
     val imageHeight: Int,
-    private val coordinates: Array<Point>
+    private val coordinates: List<Point>
 ) : Iterable<Point> {
 
     override fun iterator(): Iterator<Point> {
@@ -36,7 +37,7 @@ class FeaturePoints(
             r += 0.9
         }
 
-        return FeaturePoints(imageWidth, imageHeight, newCoordinates.toTypedArray())
+        return FeaturePoints(imageWidth, imageHeight, newCoordinates)
     }
 
     companion object {
@@ -55,7 +56,12 @@ class FeaturePoints(
             image: GrayScaledImage,
             harrisCalculationMethod: HarrisCalculationMethod
         ): FeaturePointsCalculator {
-            return HarrisCalculator(size, threshold, image, harrisCalculationMethod)
+            return HarrisCalculator(
+                size,
+                threshold,
+                image.applyFilter(GaussianFilter(1.6)),
+                harrisCalculationMethod
+            )
         }
     }
 

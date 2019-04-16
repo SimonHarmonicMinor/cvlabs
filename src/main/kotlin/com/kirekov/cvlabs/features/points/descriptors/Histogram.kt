@@ -1,7 +1,7 @@
 package com.kirekov.cvlabs.features.points.descriptors
 
 import com.kirekov.cvlabs.image.normalization.normalizeVector
-import kotlin.math.absoluteValue
+import kotlin.math.abs
 
 data class IndexValue<E>(val index: Int, val value: E)
 
@@ -47,45 +47,41 @@ class Histogram(
 }
 
 
-class HistogramBuilder(private val angles: DoubleArray) {
-    val values = DoubleArray(angles.size)
-
+class HistogramBuilder(private val step: Double, private val histogramSize: Int) {
+    val values = DoubleArray(histogramSize)
+    val angles = (0..histogramSize).map { step * it }
     fun addGradient(gradientValue: Double, gradientAngle: Double) {
-        var isOk = false
-        for (i in 0 until values.size) {
+        for (i in 1..histogramSize) {
             if (gradientAngle <= angles[i]) {
-                if (i == 0) {
-                    values[i] += gradientValue
-                    isOk = true
-                    break
-                }
-
-                val midAngle = ((angles[i] - angles[i - 1]) / 2) + angles[i - 1]
-                val halfValue = gradientValue / 2
-                values[i - 1] += halfValue
-                values[i] += halfValue
-
-                val deltaValue = ((gradientAngle - midAngle).absoluteValue / (angles[i] - midAngle)) * halfValue
-
-                if (gradientAngle > midAngle) {
-                    values[i] += deltaValue
-                    values[i - 1] -= deltaValue
+                val midBin = angles[i] - (step / 2)
+                val b = (gradientAngle - midBin) / step
+                val a = 1 - abs(b)
+                val c0 = a * gradientValue
+                val c1 = abs(b) * gradientValue
+                val j = i - 1
+                values[j] += c0
+                if (b >= 0) {
+                    if (j < histogramSize - 1)
+                        values[j + 1] += c1
+                    else
+                        values[0] += c1
                 } else {
-                    values[i] -= deltaValue
-                    values[i - 1] += deltaValue
+                    if (j > 0)
+                        values[j - 1] += c1
+                    else
+                        values[histogramSize - 1] += c1
                 }
-
-                isOk = true
                 break
             }
-        }
-
-        if (!isOk) {
-            values[values.lastIndex] += gradientValue
         }
     }
 
     fun build(): Histogram {
-        return Histogram(values.toList(), angles.toList())
+        return Histogram(
+            values.toList(),
+            (0 until histogramSize).map {
+                it * step + step / 2
+            }
+        )
     }
 }

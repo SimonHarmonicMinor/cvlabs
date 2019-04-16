@@ -7,7 +7,11 @@ import com.kirekov.cvlabs.features.points.descriptors.ImageDescriptors
 import com.kirekov.cvlabs.image.borders.ImagePixelsHandler
 import com.kirekov.cvlabs.image.filter.Filter
 import com.kirekov.cvlabs.image.filter.SeparableFilter
+import com.kirekov.cvlabs.image.filter.blur.GaussianFilter
+import com.kirekov.cvlabs.image.filter.derivative.sobel.SobelFilter
+import com.kirekov.cvlabs.image.filter.derivative.sobel.SobelType
 import com.kirekov.cvlabs.image.normalization.normalize
+import com.kirekov.cvlabs.octaves.Blob
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -15,24 +19,19 @@ import kotlinx.coroutines.runBlocking
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.awt.image.BufferedImage.TYPE_INT_RGB
-import java.util.*
-import kotlin.math.max
+import java.lang.Math.pow
+import kotlin.math.*
 import kotlin.streams.toList
 
 class GrayScaledImage(
     val width: Int,
     val height: Int,
-    private val imgArray: DoubleArray,
+    private val imgArray: List<Double>,
     private val imagePixelsHandler: ImagePixelsHandler
 ) {
 
     fun getPixelValue(x: Int, y: Int): Double {
-        try {
-            return imagePixelsHandler.getPixelValue(x, y, this)
-        } catch (ex: Exception) {
-            throw Exception()
-        }
-
+        return imagePixelsHandler.getPixelValue(x, y, this)
     }
 
     fun getPixelValue(index: Int): Double {
@@ -40,13 +39,13 @@ class GrayScaledImage(
     }
 
     fun applyFilter(filter: Filter): GrayScaledImage {
-        val arr = (0 until width).toList().parallelStream().map { i ->
-            (0 until height).toList().stream().map { j ->
+        val arr = (0 until width).toList().parallelStream().flatMap { i ->
+            (0 until height).map { j ->
                 applyFilterToPoint(filter, i, j)
-            }.toList()
-        }.toList().flatMap { it.asIterable() }.toDoubleArray()
+            }.stream()
+        }
 
-        return GrayScaledImage(width, height, arr, imagePixelsHandler)
+        return GrayScaledImage(width, height, arr.toList(), imagePixelsHandler)
     }
 
     fun applyFilterToPoint(filter: Filter, i: Int, j: Int): Double {
@@ -65,7 +64,7 @@ class GrayScaledImage(
         val endPos = (separableFilter.size - 1) / 2
         val startPos = endPos * -1
 
-        val arr = (0 until width).map { i ->
+        val arr = (0 until width).flatMap { i ->
             (0 until height).map { j ->
                 (startPos..endPos).mapIndexed { indexV, x ->
                     val horizontalSum = (startPos..endPos).mapIndexed { indexH, y ->
@@ -75,7 +74,7 @@ class GrayScaledImage(
                     horizontalSum * separableFilter.getVerticalFilter1D()[indexV]
                 }.sum()
             }
-        }.flatMap { x -> x.asIterable() }.toDoubleArray()
+        }
 
         return GrayScaledImage(width, height, arr, imagePixelsHandler)
     }
@@ -94,9 +93,9 @@ class GrayScaledImage(
         image2: GrayScaledImage,
         function: (Double, Double) -> Double
     ): GrayScaledImage {
-        val arr = (0 until width * height).toList().parallelStream().map { i ->
+        val arr = (0 until width * height).map { i ->
             function(image1.getPixelValue(i), image2.getPixelValue(i))
-        }.toList().toDoubleArray()
+        }
 
         return GrayScaledImage(width, height, arr, imagePixelsHandler)
     }
@@ -116,7 +115,7 @@ class GrayScaledImage(
         return GrayScaledImage(
             width / 2,
             height / 2,
-            newImageArr.toDoubleArray(),
+            newImageArr,
             imagePixelsHandler
         )
     }
@@ -126,8 +125,8 @@ class GrayScaledImage(
 
         val normalizedImgArray = imgArray.normalize(0.0, 255.0)
 
-        (0 until width).map { i ->
-            (0 until height).map { j ->
+        (0 until width).forEach { i ->
+            (0 until height).forEach { j ->
                 val pixelValue = normalizedImgArray[height * i + j]
                 val color = Color(pixelValue.toInt(), pixelValue.toInt(), pixelValue.toInt())
                 bufferedImage.setRGB(i, j, color.rgb)
@@ -154,7 +153,7 @@ class GrayScaledImage(
                 (startPos..endPos).forEach { y ->
                     try {
                         bufferedImage.setRGB(point.x + x, point.y + y, Color.RED.rgb)
-                    } catch (ex: ArrayIndexOutOfBoundsException) {
+                    } catch (ex: Exception) {
 
                     }
                 }
@@ -164,7 +163,148 @@ class GrayScaledImage(
         return bufferedImage
     }
 
+    fun getBufferedImage(blobs: List<Blob>): BufferedImage {
+        val bufferedImage = getBufferedImage()
+        val graphics = bufferedImage.graphics
+
+        blobs.forEach { blob ->
+            graphics.color = Color.RED
+            val blobRadius = blob.radius * pow(2.0, blob.octaveIndex.toDouble())
+            graphics.drawOval(
+                (blob.x - blobRadius).toInt(),
+                (blob.y - blobRadius).toInt(),
+                (blobRadius * 2).roundToInt(),
+                (blobRadius * 2).roundToInt()
+            )
+            val descriptorSize =
+                ((blob.descriptorSizeRatio * 16) * pow(2.0, blob.octaveIndex.toDouble()))
+                    .roundToInt()
+            graphics.color = Color.BLUE
+            graphics.drawRect(
+                (blob.x - descriptorSize / 2),
+                (blob.y - descriptorSize / 2),
+                descriptorSize,
+                descriptorSize
+            )
+        }
+
+
+        /*val size = (Math.max(width, height) / 200) * 2 + 1
+        val endPos = (size - 1) / 2
+        val startPos = endPos * -1;
+
+
+        for (i in 0 until blobs.size) {
+            (startPos..endPos).forEach { x ->
+                (startPos..endPos).forEach { y ->
+                    try {
+                        bufferedImage.setRGB(blobs[i].x + x, blobs[i].y + y, Color.RED.rgb)
+                    } catch (ex: ArrayIndexOutOfBoundsException) {
+
+                    }
+                }
+            }
+        }*/
+
+        return bufferedImage
+    }
+
     companion object {
+
+        fun drawAngles(
+            image: GrayScaledImage,
+            featurePoints: FeaturePoints
+        ): Pair<BufferedImage, List<Double>> {
+            val bufferedImage = image.getBufferedImage(featurePoints)
+            val xDerivative = image.applyFilter(SobelFilter(SobelType.X))
+            val yDerivative = image.applyFilter(SobelFilter(SobelType.Y))
+
+            val gradientValues = xDerivative.mapImages(yDerivative) { x, y ->
+                Math.sqrt(x.pow(2) + y.pow(2))
+            }
+
+            data class DescriptorLine(val point1: Point, val point2: Point, val value: Double)
+
+            val d = 70
+            val windowSize = 15
+            val lowerBorder = windowSize / 2
+            val higherBorder =
+                if (windowSize % 2 == 0)
+                    abs(lowerBorder) - 1
+                else
+                    abs(lowerBorder)
+
+            val bordersRange = (-lowerBorder..higherBorder)
+
+            val gaussianFilter = GaussianFilter(windowSize)
+
+            val angles = mutableListOf<Double>()
+
+            val descriptorLines = featurePoints.map { point ->
+
+                val angle = ImageDescriptors.calculateAreaOrientationAngle(
+                    point.x,
+                    point.y,
+                    bordersRange,
+                    gaussianFilter,
+                    gradientValues,
+                    36
+                )[0]
+
+                angles.add(angle)
+                DescriptorLine(
+                    point,
+                    Point(
+                        point.x + (d * cos(angle))
+                            .roundToInt(),
+                        point.y + (d * sin(angle))
+                            .roundToInt(),
+                        10.0
+                    ),
+                    10.0
+                )
+            }
+
+            val colors = arrayOf(
+                Color.BLACK,
+                Color.BLUE,
+                Color.CYAN,
+                Color.GREEN,
+                Color.MAGENTA,
+                Color.ORANGE,
+                Color.PINK,
+                Color.RED,
+                Color.WHITE,
+                Color.YELLOW,
+                Color.DARK_GRAY,
+                Color.GRAY,
+                Color.LIGHT_GRAY
+            )
+
+            var index = 0
+
+            val graphics = bufferedImage.graphics
+
+            descriptorLines.forEach { descriptorLine ->
+                var color = colors.getOrNull(index++)
+                if (color == null) {
+                    index = 0
+                    color = colors.get(index++)
+                }
+
+                graphics.color = color
+
+                graphics.drawLine(
+                    descriptorLine.point1.x,
+                    descriptorLine.point1.y,
+                    descriptorLine.point2.x,
+                    descriptorLine.point2.y
+                )
+            }
+
+            return Pair(bufferedImage, angles)
+        }
+
         fun combineImagesByDescriptors(
             image1: GrayScaledImage,
             descriptors1: ImageDescriptors,
@@ -201,7 +341,7 @@ class GrayScaledImage(
 
             data class DescriptorLine(val point1: Point, val point2: Point, val value: Double)
 
-            val descriptorLines = descriptors1.descriptors.parallelStream().map { descriptor ->
+            val descriptorLines = descriptors1.descriptors.map { descriptor ->
                 val (minimum, nextAfter) =
                     descriptors2.findClosestTo(descriptor, descriptorsDistance, 2)
                 DescriptorLine(
@@ -209,9 +349,7 @@ class GrayScaledImage(
                     minimum.descriptor.point,
                     minimum.distance / nextAfter.distance
                 )
-            }.filter { it.value < 0.9 }
-                .map { Optional.ofNullable(it).get() }
-                .toList()
+            }.filter { it.value < 0.8 }
 
 
             val graphics = newBufferedImage.graphics
@@ -226,7 +364,10 @@ class GrayScaledImage(
                 Color.PINK,
                 Color.RED,
                 Color.WHITE,
-                Color.YELLOW
+                Color.YELLOW,
+                Color.DARK_GRAY,
+                Color.GRAY,
+                Color.LIGHT_GRAY
             )
 
             var index = 0

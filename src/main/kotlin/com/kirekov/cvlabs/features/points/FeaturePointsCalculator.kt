@@ -5,9 +5,7 @@ import com.kirekov.cvlabs.image.GrayScaledImage
 import com.kirekov.cvlabs.image.filter.blur.GaussianFilter
 import com.kirekov.cvlabs.image.filter.derivative.sobel.SobelFilter
 import com.kirekov.cvlabs.image.filter.derivative.sobel.SobelType
-import java.util.*
 import kotlin.math.pow
-import kotlin.streams.toList
 
 
 interface FeaturePointsCalculator {
@@ -26,14 +24,13 @@ class MorravecCalculator(
         val endPos = (size - 1) / 2
         val startPos = endPos * -1
 
-        val pointsValues = (0 until image.width).toList().parallelStream().flatMap { i ->
-            (0 until image.height).toList().stream().map { j ->
+        val pointsValues = (0 until image.width).flatMap { i ->
+            (0 until image.height).map { j ->
                 val value = applyMoravecToPoint(i, j, startPos, endPos, offsetList)
                 Triple(i, j, value)
             }.filter { x -> x.third > threshold }
-        }.toList()
-            .map { Optional.ofNullable(it).map { v -> Point(v.first, v.second, v.third) }.get() }
-            .toTypedArray()
+        }
+            .map { v -> Point(v.first, v.second, v.third) }
         return FeaturePoints(image.width, image.height, pointsValues)
     }
 
@@ -69,22 +66,72 @@ class HarrisCalculator(
 ) : FeaturePointsCalculator {
     override fun calculate(): FeaturePoints {
         val gaussianFilter = GaussianFilter(size)
-        val pointsValues = (0 until image.width).toList().parallelStream().flatMap { i ->
-            (0 until image.height).toList().parallelStream().map { j ->
-                val pointResult = applyHarrisToPoint(i, j, gaussianFilter)
+        val derivativesX = image.applyFilter(SobelFilter(SobelType.X))
+        val derivativesY = image.applyFilter(SobelFilter(SobelType.Y))
+
+        val pointsValues = (0 until image.width).map { i ->
+            (0 until image.height).map { j ->
+                val pointResult = applyHarrisToPoint(
+                    i,
+                    j,
+                    gaussianFilter,
+                    derivativesX,
+                    derivativesY
+                )
                 val a = pointResult.first
                 val b = pointResult.second
                 val c = pointResult.third
                 Triple(i, j, harrisCalculationMethod.calculateDetectionValue(a, b, c))
-            }.filter { x -> x.third > threshold }
-        }.toList()
-            .map { Optional.ofNullable(it).map { v -> Point(v.first, v.second, v.third) }.get() }
-            .toTypedArray()
+            }
+        }
 
-        return FeaturePoints(image.width, image.height, pointsValues)
+        val pointValuesFiltered = mutableListOf<Point>()
+        for (i in 0 until image.width) {
+            for (j in 0 until image.height) {
+                val current = pointsValues[i][j]
+                val triples = mutableListOf<Triple<Int, Int, Double>>()
+
+                for (x in i - 1..i + 1) {
+                    for (y in j - 1..j + 1) {
+                        if (x < 0 || x >= image.width || y < 0 || y >= image.height)
+                            continue
+                        triples.add(pointsValues[x][y])
+                    }
+                }
+
+                if (triples.maxBy { it.third } == current && current.third >= threshold)
+                    pointValuesFiltered.add(Point(current.first, current.second, current.third))
+            }
+        }
+
+
+        return FeaturePoints(image.width, image.height, pointValuesFiltered)
     }
 
-    private fun applyHarrisToPoint(i: Int, j: Int, gaussianFilter: GaussianFilter)
+    fun calculatePoint(i: Int, j: Int): Double {
+        val gaussianFilter = if (size % 2 == 1) GaussianFilter(size) else GaussianFilter(size + 1)
+        val derivativesX = image.applyFilter(SobelFilter(SobelType.X))
+        val derivativesY = image.applyFilter(SobelFilter(SobelType.Y))
+        val pointResult = applyHarrisToPoint(
+            i,
+            j,
+            gaussianFilter,
+            derivativesX,
+            derivativesY
+        )
+        val a = pointResult.first
+        val b = pointResult.second
+        val c = pointResult.third
+        return harrisCalculationMethod.calculateDetectionValue(a, b, c)
+    }
+
+    private fun applyHarrisToPoint(
+        i: Int,
+        j: Int,
+        gaussianFilter: GaussianFilter,
+        derivativesX: GrayScaledImage,
+        derivativesY: GrayScaledImage
+    )
             : Triple<Double, Double, Double> {
         val endPos = (gaussianFilter.size - 1) / 2
         val startPos = endPos * -1
@@ -92,19 +139,17 @@ class HarrisCalculator(
         val result = (startPos..endPos).flatMap { x ->
             (startPos..endPos).map { y ->
                 val filterValue = gaussianFilter.getValue(x, y)
-                val xDerivative =
-                    image.applyFilterToPoint(SobelFilter(SobelType.X), i - x, j - y)
-                val yDerivative =
-                    image.applyFilterToPoint(SobelFilter(SobelType.Y), i - x, j - y)
+                val xDerivative = derivativesX.getPixelValue(i + x, j + y)
+                val yDerivative = derivativesY.getPixelValue(i + x, j + y)
                 Triple(
-                    xDerivative.pow(2) * gaussianFilter.getValue(x, y),
-                    xDerivative * yDerivative * gaussianFilter.getValue(x, y),
-                    yDerivative.pow(2) * gaussianFilter.getValue(x, y)
+                    xDerivative.pow(2) * filterValue,
+                    xDerivative * yDerivative * filterValue,
+                    yDerivative.pow(2) * filterValue
                 )
             }
-        }.reduce { x, y -> x.add(y) }
+        }
 
-        return result
+        return result.reduce { x, y -> x.add(y) }
     }
 }
 
