@@ -145,26 +145,79 @@ class ImageDescriptors(
                                     ) + turnAngle
                                 )
 
-                                val hIndexI = floor((newIRounded + abs(lowerBorder)) / cellSize).toInt()
-                                val hIndexJ = floor((newJRounded + abs(lowerBorder)) / cellSize).toInt()
-
-
-                                histogramsBuilders[hIndexI][hIndexJ]
-                                    .addGradient(gradientValueBlur, gradientAngle)
-
-                                /*val x = (newI + abs(lowerBorder)) / cellSize
+                                val x = (newI + abs(lowerBorder)) / cellSize
                                 val y = (newJ + abs(lowerBorder)) / cellSize
                                 val cellRadius = cellSize / 2.0
                                 val cellCenterX = -lowerBorder + floor(x).toInt() * cellSize + cellRadius
                                 val cellCenterY = -lowerBorder + floor(y).toInt() * cellSize + cellRadius
-                                var pointXSign = sign(newI - cellCenterX).toInt()
-                                var pointYSign = sign(newJ - cellCenterY).toInt()
-                                if (pointXSign == 0 && pointYSign == 0) {
-                                    pointXSign = 1
-                                    pointYSign = 1
+
+                                val xDif = newI - cellCenterX
+                                val cx1 = if (xDif > 0) xDif else (cellSize - abs(xDif))
+                                val cx2 = cellSize - cx1
+                                val yDif = newJ - cellCenterY
+                                val cy1 = if (yDif > 0) yDif else (cellSize - abs(yDif))
+                                val cy2 = cellSize - cy1
+
+                                val distance =
+                                    sqrt(cx2.pow(2) + cy1.pow(2)) +
+                                            sqrt(cx2.pow(2) + cy2.pow(2)) +
+                                            sqrt(cx1.pow(2) + cy2.pow(2)) +
+                                            sqrt(
+                                                cx1.pow(2) + cy1.pow(2)
+                                            )
+
+                                val hIndexI = floor((newIRounded + abs(lowerBorder)) / cellSize).toInt()
+                                val hIndexJ = floor((newJRounded + abs(lowerBorder)) / cellSize).toInt()
+
+                                val rightBottom = sqrt(cx1.pow(2) + cy1.pow(2)) / distance
+                                val leftBottom = sqrt(cx2.pow(2) + cy1.pow(2)) / distance
+                                val topLeft = sqrt(cx2.pow(2) + cy2.pow(2)) / distance
+                                val topRight = sqrt(cx1.pow(2) + cy2.pow(2)) / distance
+
+                                val values = listOf(topLeft, leftBottom, topRight, rightBottom)
+
+                                val rangeX = mutableListOf<Int>()
+                                val rangeY = mutableListOf<Int>()
+
+                                if (newI < cellCenterX && newJ < cellCenterY) {
+                                    rangeX.add(-1)
+                                    rangeX.add(0)
+                                    rangeY.add(-1)
+                                    rangeY.add(0)
+                                } else if (newI > cellCenterX && newJ < cellCenterY) {
+                                    rangeX.add(0)
+                                    rangeX.add(1)
+                                    rangeY.add(-1)
+                                    rangeY.add(0)
+                                } else if (newI > cellCenterX && newJ > cellCenterY) {
+                                    rangeX.add(0)
+                                    rangeX.add(1)
+                                    rangeY.add(0)
+                                    rangeY.add(1)
+                                } else {
+                                    rangeX.add(-1)
+                                    rangeX.add(0)
+                                    rangeY.add(0)
+                                    rangeY.add(1)
+                                }
+                                var iter = 0
+                                for (i1 in rangeX) {
+                                    for (j1 in rangeY) {
+                                        try {
+                                            val coef = values[iter]
+                                            iter++
+                                            histogramsBuilders[hIndexI + i1][hIndexJ + j1]
+                                                .addGradient(
+                                                    gradientValueBlur * coef,
+                                                    gradientAngle
+                                                )
+                                        } catch (ex: IndexOutOfBoundsException) {
+
+                                        }
+                                    }
                                 }
 
-                                data class Distribution(
+                                /*data class Distribution(
                                     val x: Int,
                                     val y: Int,
                                     val distance: Double

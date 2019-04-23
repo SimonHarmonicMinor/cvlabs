@@ -1,6 +1,7 @@
 package com.kirekov.cvlabs.image
 
 import com.kirekov.cvlabs.features.points.FeaturePoints
+import com.kirekov.cvlabs.features.points.Match
 import com.kirekov.cvlabs.features.points.Point
 import com.kirekov.cvlabs.features.points.descriptors.DescriptorsDistance
 import com.kirekov.cvlabs.features.points.descriptors.ImageDescriptors
@@ -21,7 +22,6 @@ import java.awt.image.BufferedImage
 import java.awt.image.BufferedImage.TYPE_INT_RGB
 import java.lang.Math.pow
 import kotlin.math.*
-import kotlin.streams.toList
 
 class GrayScaledImage(
     val width: Int,
@@ -39,13 +39,13 @@ class GrayScaledImage(
     }
 
     fun applyFilter(filter: Filter): GrayScaledImage {
-        val arr = (0 until width).toList().parallelStream().flatMap { i ->
+        val arr = (0 until width).flatMap { i ->
             (0 until height).map { j ->
                 applyFilterToPoint(filter, i, j)
-            }.stream()
+            }
         }
 
-        return GrayScaledImage(width, height, arr.toList(), imagePixelsHandler)
+        return GrayScaledImage(width, height, arr, imagePixelsHandler)
     }
 
     fun applyFilterToPoint(filter: Filter, i: Int, j: Int): Double {
@@ -303,6 +303,22 @@ class GrayScaledImage(
             }
 
             return Pair(bufferedImage, angles)
+        }
+
+        fun getMatches(
+            descriptors1: ImageDescriptors,
+            descriptors2: ImageDescriptors,
+            descriptorsDistance: DescriptorsDistance
+        ): List<Match> {
+            val matches = mutableListOf<Match>()
+            descriptors1.descriptors.forEach { descriptor ->
+                val (minimum, nextAfter) =
+                    descriptors2.findClosestTo(descriptor, descriptorsDistance, 2)
+
+                if ((minimum.distance / nextAfter.distance) < 0.8)
+                    matches.add(Match(descriptor.point, minimum.descriptor.point))
+            }
+            return matches
         }
 
         fun combineImagesByDescriptors(

@@ -1,6 +1,7 @@
 package com.kirekov.cvlabs
 
 import com.kirekov.cvlabs.extension.ThreadPool
+import com.kirekov.cvlabs.features.pano.Panorama
 import com.kirekov.cvlabs.features.points.EigenValuesMethod
 import com.kirekov.cvlabs.features.points.FeaturePoints
 import com.kirekov.cvlabs.features.points.descriptors.EuclidDistance
@@ -23,8 +24,8 @@ import javax.imageio.ImageIO
 fun main() {
     val time = System.currentTimeMillis()
 
-    /*val bufferedImage1 = ImageIO.read(File("input/lena.jpg"))
-    val bufferedImage2 = ImageIO.read(File("input/lena_stretched.jpg"))
+    /*val bufferedImage1 = ImageIO.read(File("input/1.jpg"))
+    val bufferedImage2 = ImageIO.read(File("input/3.jpg"))
 
     val grayScaledImage1 = bufferedImageToGrayScaledImage(
         bufferedImage1,
@@ -41,9 +42,8 @@ fun main() {
     val buf = descriptors(grayScaledImage1, grayScaledImage2)
 
     ImageIO.write(buf, "jpg", File("output2.jpg"))*/
+
     octaves()
-
-
     println(System.currentTimeMillis() - time)
 }
 
@@ -54,21 +54,21 @@ fun descriptors(
 
     val featurePoints1 =
         FeaturePoints.ofHarris(
-            7,
-            0.005,
+            5,
+            0.01,
             grayScaledImage1,
             EigenValuesMethod()
         ).calculate()
-            .filterByAdaptiveNonMaximumSuppression(100)
+    //.filterByAdaptiveNonMaximumSuppression(200)
 
     val featurePoints2 =
         FeaturePoints.ofHarris(
-            7,
-            0.005,
+            5,
+            0.01,
             grayScaledImage2,
             EigenValuesMethod()
         ).calculate()
-            .filterByAdaptiveNonMaximumSuppression(100)
+    //.filterByAdaptiveNonMaximumSuppression(200)
 
 
     val imageDescriptors1 = ImageDescriptors.of(
@@ -130,14 +130,14 @@ fun octaves() = runBlocking {
         .forEach { it.delete() }
     Files.createDirectory(Paths.get("output"))
 
-    val bufferedImage1 = ImageIO.read(File("input/buttefly.jpg"))
+    val bufferedImage1 = ImageIO.read(File("input/2.jpg"))
     val grayScaledImage1 = bufferedImageToGrayScaledImage(
         bufferedImage1,
         HdtvScaling(),
         MirrorPixelsHandler()
     )
 
-    val bufferedImage2 = ImageIO.read(File("input/buttefly_1.3.jpg"))
+    val bufferedImage2 = ImageIO.read(File("input/4.jpg"))
     val grayScaledImage2 = bufferedImageToGrayScaledImage(
         bufferedImage2,
         HdtvScaling(),
@@ -203,36 +203,20 @@ fun octaves() = runBlocking {
         Pair(descriptors2, blobs2)
     }
 
+    val imageDescriptors1 = ImageDescriptors(grayScaledImage1, descriptors1.await().first)
+    val imageDescriptors2 = ImageDescriptors(grayScaledImage2, descriptors2.await().first)
 
-    val image = GrayScaledImage
-        .combineImagesByDescriptors(
-            grayScaledImage1,
-            ImageDescriptors(grayScaledImage1, descriptors1.await().first),
-            grayScaledImage2,
-            ImageDescriptors(grayScaledImage2, descriptors2.await().first),
-            EuclidDistance()
-        )
+    val matches = GrayScaledImage.getMatches(
+        imageDescriptors1,
+        imageDescriptors2,
+        EuclidDistance()
+    )
 
-    ImageIO
-        .write(
-            grayScaledImage1.getBufferedImage(descriptors1.await().second),
-            "jpg",
-            File("blobs1.jpg")
-        )
+    val result = Panorama.create(grayScaledImage1, grayScaledImage2, matches)
 
-    ImageIO
-        .write(
-            grayScaledImage2.getBufferedImage(descriptors2.await().second),
-            "jpg",
-            File("blobs2.jpg")
-        )
-
-    ImageIO
-        .write(
-            image,
-            "jpg",
-            File("blobs-connected.jpg")
-        )
+    ImageIO.write(
+        result, "jpg", File("outputfddf.jpg")
+    )
 
 /*
     val folderPath = "output"
