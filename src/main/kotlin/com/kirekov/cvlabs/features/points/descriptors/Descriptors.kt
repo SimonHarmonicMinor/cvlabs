@@ -95,7 +95,7 @@ class ImageDescriptors(
             val bordersRange = (-lowerBorder..higherBorder)
             val cellSize = windowSize.toDouble() / histogramRowSize
 
-            val descriptors = featurePoints.map { point ->
+            val descriptors = featurePoints.flatMap { point ->
 
                 val turnAngles = calculateAreaOrientationAngle(
                     point.x,
@@ -106,18 +106,16 @@ class ImageDescriptors(
                     36
                 )
 
-                val histogramsBuilders =
-                    (0 until histogramRowSize).map {
+
+                val calcDescriptors = turnAngles.map { turnAngle ->
+                    val histogramsBuilders =
                         (0 until histogramRowSize).map {
-                            HistogramBuilder(step, histogramSize)
+                            (0 until histogramRowSize).map {
+                                HistogramBuilder(step, histogramSize)
+                            }
                         }
-                    }
-
-
-                bordersRange.forEach { i ->
-                    bordersRange.forEach { j ->
-                        turnAngles.forEach { turnAngle ->
-
+                    bordersRange.forEach { i ->
+                        bordersRange.forEach { j ->
                             val newI = i * cos(turnAngle) + j * sin(turnAngle)
                             val newJ = j * cos(turnAngle) - i * sin(turnAngle)
 
@@ -216,45 +214,19 @@ class ImageDescriptors(
                                         }
                                     }
                                 }
-
-                                /*data class Distribution(
-                                    val x: Int,
-                                    val y: Int,
-                                    val distance: Double
-                                )
-
-                                val distributions = mutableListOf<Distribution>()
-                                var sum = 0.0
-                                for (dx in (-1 .. 1)) {
-                                    for (dy in  (-1 .. 1)) {
-                                        if (x + dx < 0 || x + dx >= histogramRowSize || y + dy < 0 || y + dy >= histogramRowSize)
-                                            continue
-                                        if (dx * pointXSign >= 0 && dy * pointYSign >= 0) {
-                                            val neighbourX = -lowerBorder + floor(x + dx).toInt() * cellSize + cellRadius
-                                            val neighbourY = -lowerBorder + floor(y + dy).toInt() * cellSize + cellRadius
-                                            val distance = sqrt((neighbourX - newI).pow(2) + (neighbourY - newJ).pow(2))
-                                            distributions.add(Distribution(floor(x + dx).roundToInt(), floor(y + dy).roundToInt(), distance))
-                                            sum += distance
-                                        }
-                                    }
-                                }
-
-                                distributions.forEach {
-                                    histogramsBuilders[it.x][it.y]
-                                        .addGradient(gradientValueBlur * (1 - it.distance / sum), gradientAngle)
-                                }*/
                             }
                         }
 
                     }
+                    val desc = Descriptor(
+                        histogramsBuilders
+                            .flatMap { it.map { h -> h.build() } },
+                        point
+                    ).normalize()
+                    desc.angle = turnAngle
+                    desc
                 }
-
-
-                Descriptor(
-                    histogramsBuilders
-                        .flatMap { it.map { h -> h.build() } },
-                    point
-                ).normalize()
+                calcDescriptors
             }
             ImageDescriptors(image, descriptors)
         }
@@ -314,6 +286,8 @@ class ImageDescriptors(
 class Descriptor {
     val values: List<Double>
     var point: Point
+    var scale: Double = 0.0
+    var angle: Double = 0.0
 
     constructor(histograms: List<Histogram>, point: Point) {
         this.values = histograms.flatten()

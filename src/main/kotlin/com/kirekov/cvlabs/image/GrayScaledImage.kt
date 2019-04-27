@@ -315,8 +315,17 @@ class GrayScaledImage(
                 val (minimum, nextAfter) =
                     descriptors2.findClosestTo(descriptor, descriptorsDistance, 2)
 
-                if ((minimum.distance / nextAfter.distance) < 0.8)
+                if ((minimum.distance / nextAfter.distance) < 0.8) {
+                    descriptor.point.value = descriptor.scale
+                    descriptor.point.scale = descriptor.scale
+                    descriptor.point.angle = descriptor.angle
+
+                    minimum.descriptor.point.value = minimum.descriptor.scale
+                    minimum.descriptor.point.scale = minimum.descriptor.scale
+                    minimum.descriptor.point.angle = minimum.descriptor.angle
                     matches.add(Match(descriptor.point, minimum.descriptor.point))
+                }
+
             }
             return matches
         }

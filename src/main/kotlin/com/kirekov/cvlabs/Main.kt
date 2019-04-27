@@ -6,6 +6,7 @@ import com.kirekov.cvlabs.features.points.EigenValuesMethod
 import com.kirekov.cvlabs.features.points.FeaturePoints
 import com.kirekov.cvlabs.features.points.descriptors.EuclidDistance
 import com.kirekov.cvlabs.features.points.descriptors.ImageDescriptors
+import com.kirekov.cvlabs.features.recognition.ObjectDetector
 import com.kirekov.cvlabs.image.GrayScaledImage
 import com.kirekov.cvlabs.image.borders.MirrorPixelsHandler
 import com.kirekov.cvlabs.image.grayscaling.bufferedImageToGrayScaledImage
@@ -24,8 +25,8 @@ import javax.imageio.ImageIO
 fun main() {
     val time = System.currentTimeMillis()
 
-    /*val bufferedImage1 = ImageIO.read(File("input/1.jpg"))
-    val bufferedImage2 = ImageIO.read(File("input/3.jpg"))
+    /*val bufferedImage1 = ImageIO.read(File("input/lena.jpg"))
+    val bufferedImage2 = ImageIO.read(File("input/lena_90.jpg"))
 
     val grayScaledImage1 = bufferedImageToGrayScaledImage(
         bufferedImage1,
@@ -41,9 +42,10 @@ fun main() {
 
     val buf = descriptors(grayScaledImage1, grayScaledImage2)
 
-    ImageIO.write(buf, "jpg", File("output2.jpg"))*/
+    ImageIO.write(buf, "jpg", File("test.jpg"))*/
 
     octaves()
+    //descriptors(grayScaledImage1, grayScaledImage2)
     println(System.currentTimeMillis() - time)
 }
 
@@ -130,14 +132,14 @@ fun octaves() = runBlocking {
         .forEach { it.delete() }
     Files.createDirectory(Paths.get("output"))
 
-    val bufferedImage1 = ImageIO.read(File("input/2.jpg"))
+    val bufferedImage1 = ImageIO.read(File("input/1.jpg"))
     val grayScaledImage1 = bufferedImageToGrayScaledImage(
         bufferedImage1,
         HdtvScaling(),
         MirrorPixelsHandler()
     )
 
-    val bufferedImage2 = ImageIO.read(File("input/4.jpg"))
+    val bufferedImage2 = ImageIO.read(File("input/3.jpg"))
     val grayScaledImage2 = bufferedImageToGrayScaledImage(
         bufferedImage2,
         HdtvScaling(),
@@ -212,10 +214,13 @@ fun octaves() = runBlocking {
         EuclidDistance()
     )
 
+
     val result = Panorama.create(grayScaledImage1, grayScaledImage2, matches)
 
+    // val result = ObjectDetector.detect(grayScaledImage1, grayScaledImage2, matches)
+
     ImageIO.write(
-        result, "jpg", File("outputfddf.jpg")
+        result, "jpg", File("pano3.jpg")
     )
 
 /*

@@ -64,7 +64,8 @@ class Blob(
                     4,
                     10
                 ).descriptors[0]
-
+                res.scale = octaveElement.globalSigma
+                res.angle = res.angle
                 val actualPoint = Point(
                     (point.x * pow(2.0, blob.octaveIndex.toDouble())).roundToInt(),
                     (point.y * pow(2.0, blob.octaveIndex.toDouble())).roundToInt(),

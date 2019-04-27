@@ -18,61 +18,14 @@ class Panorama {
             image2: GrayScaledImage,
             matches: List<Match>
         ): BufferedImage {
-            val n = matches.size
-            val indices = ArrayList<Int>(n)
-            for (i in 0 until n) indices.add(i)
-            val cnt = 1000
-
-            var inliners: List<Pair<PanoramaPoint, PanoramaPoint>> = LinkedList()
-            var foundReversePerspective: Perspective? = null
-
-            val pairs = ArrayList<Pair<PanoramaPoint, PanoramaPoint>>()
             val w1 = image1.width
             val h1 = image1.height
             val w2 = image2.width
             val h2 = image2.height
-            for (i in 0 until n) {
-                val cur = matches[i]
-                pairs.add(
-                    Pair(
-                        PanoramaPoint(convertTo(cur.point1.x.toDouble(), w1), convertTo(cur.point1.y.toDouble(), h1)),
-                        PanoramaPoint(convertTo(cur.point2.x.toDouble(), w2), convertTo(cur.point2.y.toDouble(), h2))
-                    )
-                )
-            }
-
-            for (voting in 0 until cnt) {
-                indices.shuffle(random)
-                val currentMatch = java.util.ArrayList<Pair<PanoramaPoint, PanoramaPoint>>(4)
-                for (i in 0..3) currentMatch.add(pairs[indices[i]])
-                val perspective = getPerspective(currentMatch)
-                val curOk = LinkedList<Pair<PanoramaPoint, PanoramaPoint>>()
-                for (i in 0 until n) {
-                    val pair = pairs[i]
-                    val a = pair.first
-                    val b = pair.second
-                    val conv = perspective.apply(a)
-                    val x0 = b.x
-                    val y0 = b.y
-                    val x1 = conv.x
-                    val y1 = conv.y
-
-                    val eps = Math.max(
-                        Math.abs(convertFrom(x0, w2) - convertFrom(x1, w2)),
-                        Math.abs(convertFrom(y0, h2) - convertFrom(y1, h2))
-                    ).toDouble()
-                    if (eps < EPS) {
-                        curOk.add(Pair(a, b))
-                    }
-                }
-                if (inliners.size < curOk.size) {
-                    inliners = java.util.ArrayList(curOk)
-                    println("INLINE = " + inliners.size)
-                }
-            }
+            val inliners = getInliners(image1, image2, matches)
 
             val foundPerspective = getPerspective(inliners)
-            foundReversePerspective = getReversePerspective(inliners)
+            val foundReversePerspective = getReversePerspective(inliners)
 
             var minX = -1.0
             var maxX = 1.0
@@ -136,7 +89,67 @@ class Panorama {
             return result
         }
 
-        private fun getPerspective(currentMatches: List<Pair<PanoramaPoint, PanoramaPoint>>): Perspective {
+        fun getInliners(
+            image1: GrayScaledImage,
+            image2: GrayScaledImage,
+            matches: List<Match>
+        ): List<Pair<PanoramaPoint, PanoramaPoint>> {
+            val n = matches.size
+            val indices = ArrayList<Int>(n)
+            for (i in 0 until n) indices.add(i)
+            val cnt = 1000
+
+            var inliners: List<Pair<PanoramaPoint, PanoramaPoint>> = LinkedList()
+
+            val pairs = ArrayList<Pair<PanoramaPoint, PanoramaPoint>>()
+            val w1 = image1.width
+            val h1 = image1.height
+            val w2 = image2.width
+            val h2 = image2.height
+            for (i in 0 until n) {
+                val cur = matches[i]
+                pairs.add(
+                    Pair(
+                        PanoramaPoint(convertTo(cur.point1.x.toDouble(), w1), convertTo(cur.point1.y.toDouble(), h1)),
+                        PanoramaPoint(convertTo(cur.point2.x.toDouble(), w2), convertTo(cur.point2.y.toDouble(), h2))
+                    )
+                )
+            }
+
+            for (voting in 0 until cnt) {
+                indices.shuffle(random)
+                val currentMatch = java.util.ArrayList<Pair<PanoramaPoint, PanoramaPoint>>(4)
+                for (i in 0..3) currentMatch.add(pairs[indices[i]])
+                val perspective = getPerspective(currentMatch)
+                val curOk = LinkedList<Pair<PanoramaPoint, PanoramaPoint>>()
+                for (i in 0 until n) {
+                    val pair = pairs[i]
+                    val a = pair.first
+                    val b = pair.second
+                    val conv = perspective.apply(a)
+                    val x0 = b.x
+                    val y0 = b.y
+                    val x1 = conv.x
+                    val y1 = conv.y
+
+                    val eps = Math.max(
+                        Math.abs(convertFrom(x0, w2) - convertFrom(x1, w2)),
+                        Math.abs(convertFrom(y0, h2) - convertFrom(y1, h2))
+                    ).toDouble()
+                    if (eps < EPS) {
+                        curOk.add(Pair(a, b))
+                    }
+                }
+                if (inliners.size < curOk.size) {
+                    inliners = java.util.ArrayList(curOk)
+                    println("INLINE = " + inliners.size)
+                }
+            }
+
+            return inliners
+        }
+
+        fun getPerspective(currentMatches: List<Pair<PanoramaPoint, PanoramaPoint>>): Perspective {
             val matrix = Array(currentMatches.size * 2) { DoubleArray(9) }
             for (i in currentMatches.indices) {
                 val a = currentMatches[i].first
@@ -172,7 +185,7 @@ class Panorama {
             return Perspective(h)
         }
 
-        private fun getReversePerspective(currentMatch: List<Pair<PanoramaPoint, PanoramaPoint>>): Perspective {
+        fun getReversePerspective(currentMatch: List<Pair<PanoramaPoint, PanoramaPoint>>): Perspective {
             val reversed = java.util.ArrayList<Pair<PanoramaPoint, PanoramaPoint>>(currentMatch.size)
             for (cur in currentMatch) {
                 reversed.add(Pair(cur.second, cur.first))
@@ -180,11 +193,11 @@ class Panorama {
             return getPerspective(reversed)
         }
 
-        private fun convertTo(coord: Double, size: Int): Double {
+        fun convertTo(coord: Double, size: Int): Double {
             return (2.0 * coord - size) / size
         }
 
-        private fun convertFrom(coord: Double, size: Int): Int {
+        fun convertFrom(coord: Double, size: Int): Int {
             return ((coord * size + size) / 2).toInt()
         }
 
@@ -203,7 +216,7 @@ class Panorama {
 
     data class PanoramaPoint(val x: Double, val y: Double)
 
-    internal class Perspective(buffer: DoubleArray) {
+    class Perspective(buffer: DoubleArray) {
         private val matrix: RealMatrix
 
         init {
