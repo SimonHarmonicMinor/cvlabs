@@ -1,7 +1,6 @@
 package com.kirekov.cvlabs
 
 import com.kirekov.cvlabs.extension.ThreadPool
-import com.kirekov.cvlabs.features.pano.Panorama
 import com.kirekov.cvlabs.features.points.EigenValuesMethod
 import com.kirekov.cvlabs.features.points.FeaturePoints
 import com.kirekov.cvlabs.features.points.descriptors.EuclidDistance
@@ -132,14 +131,14 @@ fun octaves() = runBlocking {
         .forEach { it.delete() }
     Files.createDirectory(Paths.get("output"))
 
-    val bufferedImage1 = ImageIO.read(File("input/1.jpg"))
+    val bufferedImage1 = ImageIO.read(File("input/detect/set4/image.jpg"))
     val grayScaledImage1 = bufferedImageToGrayScaledImage(
         bufferedImage1,
         HdtvScaling(),
         MirrorPixelsHandler()
     )
 
-    val bufferedImage2 = ImageIO.read(File("input/3.jpg"))
+    val bufferedImage2 = ImageIO.read(File("input/detect/set4/object.png"))
     val grayScaledImage2 = bufferedImageToGrayScaledImage(
         bufferedImage2,
         HdtvScaling(),
@@ -215,12 +214,12 @@ fun octaves() = runBlocking {
     )
 
 
-    val result = Panorama.create(grayScaledImage1, grayScaledImage2, matches)
-
+    // val result = Panorama.create(grayScaledImage1, grayScaledImage2, matches)
     // val result = ObjectDetector.detect(grayScaledImage1, grayScaledImage2, matches)
+    val result = ObjectDetector.find(grayScaledImage1, grayScaledImage2, matches)
 
     ImageIO.write(
-        result, "jpg", File("pano3.jpg")
+        result, "jpg", File("detector4.jpg")
     )
 
 /*

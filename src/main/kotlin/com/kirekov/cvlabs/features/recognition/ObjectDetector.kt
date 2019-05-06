@@ -1,259 +1,282 @@
 package com.kirekov.cvlabs.features.recognition
 
 import com.kirekov.cvlabs.features.pano.Panorama
-import com.kirekov.cvlabs.features.pano.Panorama.Companion.convertFrom
-import com.kirekov.cvlabs.features.pano.Panorama.Companion.getReversePerspective
 import com.kirekov.cvlabs.features.points.Match
 import com.kirekov.cvlabs.image.GrayScaledImage
-import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.Graphics2D
 import java.awt.image.BufferedImage
 import java.util.*
 
 class ObjectDetector {
-    companion object {
-        fun detect(image: GrayScaledImage, obj: GrayScaledImage, matches: List<Match>): BufferedImage {
-            val objectCenterX = obj.width / 2.0
-            val objectCenterY = obj.height / 2.0
 
-            val voting = Voting(
-                image.width,
-                30,
-                image.height,
-                30,
-                image.width.toDouble(),
-                30.0,
-                Math.PI / 6
+    private var sample: GrayScaledImage? = null
+    private var image: GrayScaledImage? = null
+
+    var votesImage: BufferedImage? = null
+        private set
+
+    private var votes: Array<Array<Array<DoubleArray>>>? = null
+    private var voters: Array<Array<Array<Array<LinkedList<Match?>>>>>? = null
+    private var cellsX: Int = 0
+    private var cellsY: Int = 0
+
+    private val sampleCorners: List<Pair<Int, Int>>
+        get() = listOf(
+            Pair(0, 0),
+            Pair(sample!!.width, 0),
+            Pair(sample!!.width, sample!!.height),
+            Pair(0, sample!!.height)
+        )
+
+    private fun find(matching: List<Match>): BufferedImage {
+        cellsX = Math.ceil(image!!.width * 1.0 / COORDINATE_STEP).toInt()
+        cellsY = Math.ceil(image!!.height * 1.0 / COORDINATE_STEP).toInt()
+
+        votesImage = image!!.getBufferedImage()
+
+        val sampleCenterX = sample!!.width / 2.0
+        val sampleCenterY = sample!!.height / 2.0
+
+        votes = Array(cellsX) { Array(cellsY) { Array(ANGLE_CELLS) { DoubleArray(SCALE_CELLS) } } }
+        voters =
+            Array(cellsX) {
+                Array(cellsY) {
+                    Array(ANGLE_CELLS) {
+                        (0 until SCALE_CELLS).map { LinkedList<Match?>() }.toTypedArray()
+                    }
+                }
+            }
+        for (match in matching) {
+            val pointOnSample = match.point2
+            val pointOnImage = match.point1
+
+            val scale = pointOnImage.scale / pointOnSample.scale
+            val angle = pointOnSample.angle - pointOnImage.angle
+
+            val vX = (sampleCenterX - pointOnSample.x) * scale
+            val vY = (sampleCenterY - pointOnSample.y) * scale
+
+            val centerX = pointOnImage.x + vX * Math.cos(angle) - vY * Math.sin(angle)
+            val centerY = pointOnImage.y + vX * Math.sin(angle) + vY * Math.cos(angle)
+
+            vote(centerX, centerY, scale, angle, match)
+        }
+        val g = votesImage!!.createGraphics()
+        g.color = Color.BLUE
+        val candidates = maximums()
+
+        val w1 = image!!.width
+        val h1 = image!!.height
+
+        for (matches in candidates) {
+            val inliners = Panorama.getInliners(image!!, sample!!, matches as List<Match>)
+            val reversePerspective = Panorama.getReversePerspective(inliners)
+            var leftTop = Panorama.PanoramaPoint(-1.0, -1.0)
+            leftTop = reversePerspective.apply(leftTop)
+            val convertedLeftTop = Panorama.PanoramaPoint(
+                Panorama.convertFrom(leftTop.x, w1).toDouble(),
+                Panorama.convertFrom(leftTop.y, h1).toDouble()
             )
-            for (match in matches) {
-                val atImage = match.point1
-                val atObject = match.point2
-
-                val x = objectCenterX - atObject.x
-                val y = objectCenterY - atObject.y
-                val angle = atObject.angle
-                var cos = Math.cos(-angle)
-                var sin = Math.sin(-angle)
-
-                val rotatedY = y * cos - x * sin
-                val rotatedX = y * sin + x * cos
-                val scaledX = rotatedX / atObject.scale
-                val scaledY = rotatedY / atObject.scale
-
-                val objectScale = obj.width / atObject.scale
-
-                val resultUnscaledX = scaledX * atImage.scale
-                val resultUnscaledY = scaledY * atImage.scale
-                cos = Math.cos(atImage.angle)
-                sin = Math.sin(atImage.angle)
-                val resultY = atImage.x + resultUnscaledY * cos - resultUnscaledX * sin
-                val resultX = atImage.y + resultUnscaledY * sin + resultUnscaledX * cos
-
-                val votingAngle = atImage.angle - atObject.angle
-                val votingScale = objectScale * atImage.scale
-
-                voting.vote(resultX, resultY, votingScale, votingAngle, match)
-            }
-
-            val candidates = voting.maximums(obj.width, obj.height)
-            val w1 = image.width
-            val h1 = image.height
-            val w2 = obj.width
-            val h2 = obj.height
-            val bufferedImage = image.getBufferedImage()
-            val graphics = bufferedImage.createGraphics()
-            graphics.color = Color.ORANGE
-            graphics.stroke = BasicStroke(2f)
-            var rects = 0
-            for (match in candidates) {
-                val inliners = Panorama.getInliners(image, obj, matches)
-                if (inliners.size < 10) continue
-                println(inliners.size)
-                val reversePerspective = getReversePerspective(inliners)
-                var leftTop = Panorama.PanoramaPoint(-1.0, -1.0)
-                leftTop = reversePerspective.apply(leftTop)
-                val convertedLeftTop = Panorama.PanoramaPoint(
-                    convertFrom(leftTop.x, w1).toDouble(),
-                    convertFrom(leftTop.y, h1).toDouble()
-                )
-                var rightTop = Panorama.PanoramaPoint(1.0, -1.0)
-                rightTop = reversePerspective.apply(rightTop)
-                val convertedRightTop = Panorama.PanoramaPoint(
-                    convertFrom(rightTop.x, w1).toDouble(),
-                    convertFrom(rightTop.y, h1).toDouble()
-                )
-                var leftBottom = Panorama.PanoramaPoint(-1.0, 1.0)
-                leftBottom = reversePerspective.apply(leftBottom)
-                val convertedLeftBottom = Panorama.PanoramaPoint(
-                    convertFrom(leftBottom.x, w1).toDouble(),
-                    convertFrom(leftBottom.y, h1).toDouble()
-                )
-                var rightBottom = Panorama.PanoramaPoint(1.0, 1.0)
-                rightBottom = reversePerspective.apply(rightBottom)
-                val convertedRightBottom = Panorama.PanoramaPoint(
-                    convertFrom(rightBottom.x, w1).toDouble(),
-                    convertFrom(rightBottom.y, h1).toDouble()
-                )
-                rects++
-                drawRect(graphics, convertedLeftBottom, convertedLeftTop, convertedRightTop, convertedRightBottom)
-
-            }
-
-            return bufferedImage
+            var rightTop = Panorama.PanoramaPoint(1.0, -1.0)
+            rightTop = reversePerspective.apply(rightTop)
+            val convertedRightTop = Panorama.PanoramaPoint(
+                Panorama.convertFrom(rightTop.x, w1).toDouble(),
+                Panorama.convertFrom(rightTop.y, h1).toDouble()
+            )
+            var leftBottom = Panorama.PanoramaPoint(-1.0, 1.0)
+            leftBottom = reversePerspective.apply(leftBottom)
+            val convertedLeftBottom = Panorama.PanoramaPoint(
+                Panorama.convertFrom(leftBottom.x, w1).toDouble(),
+                Panorama.convertFrom(leftBottom.y, h1).toDouble()
+            )
+            var rightBottom = Panorama.PanoramaPoint(1.0, 1.0)
+            rightBottom = reversePerspective.apply(rightBottom)
+            val convertedRightBottom = Panorama.PanoramaPoint(
+                Panorama.convertFrom(rightBottom.x, w1).toDouble(),
+                Panorama.convertFrom(rightBottom.y, h1).toDouble()
+            )
+            drawRect(
+                g,
+                convertedLeftBottom,
+                convertedLeftTop,
+                convertedRightTop,
+                convertedRightBottom,
+                convertedLeftBottom
+            )
 
         }
 
-        private fun drawRect(graphics: Graphics2D, vararg points: Panorama.PanoramaPoint) {
-            for (i in points.indices) {
-                val j = (i + 1) % points.size
-                graphics.drawLine(
-                    points[i].x.toInt(),
-                    points[i].y.toInt(),
-                    points[j].x.toInt(),
-                    points[j].y.toInt()
-                )
-            }
-        }
+        return votesImage!!
+    }
 
-
-        internal class Voting(
-            width: Int,
-            private val widthBin: Int,
-            height: Int,
-            private val heightBin: Int,
-            maxScale: Double,
-            private val scaleBin: Double,
-            private val angleBin: Double
-        ) {
-            private val votes: Array<Array<Array<DoubleArray>>>
-            private val votedPairs: Array<Array<Array<Array<MutableList<Match>?>>>>
-            private val n: Int
-            private val m: Int
-            private val k: Int
-            private val l: Int
-
-            init {
-                n = width / widthBin + 1
-                m = height / heightBin + 1
-                k = (maxScale / scaleBin + 1).toInt()
-                l = Math.round(2 * Math.PI / angleBin).toInt()
-                println("$n $m $k $l")
-                votes = Array(n) { Array(m) { Array(k) { DoubleArray(l) } } }
-                votedPairs =
-                    Array(n) { Array(m) { Array<Array<MutableList<Match>?>>(k) { arrayOfNulls(l) } } }
-            }
-
-            fun vote(x: Double, y: Double, scale: Double, angle: Double, pointsPair: Match) {
-                var angle = angle
-                angle = normalize(angle)
-                val _x = x * 1.0 / widthBin
-                val _y = y * 1.0 / heightBin
-                val _scale = scale / scaleBin
-                val _angle = angle / angleBin
-                if (_x < 0 || _y < 0 || _scale < 0 || _angle < 0) return
-                if (_x >= n || _y >= m || _scale >= k || _angle >= l) return
-                for (i in 0..1) {
-                    val curX = (_x.toInt() + i) % n
-                    for (j in 0..1) {
-                        val curY = (_y.toInt() + j) % m
-                        for (k in 0..1) {
-                            val curScale = (_scale.toInt() + k) % this.k
-                            for (l in 0..1) {
-                                val curAngle = (_angle.toInt() + l) % this.l
-                                votes[curX][curY][curScale][curAngle] += Math.abs(_x - curX) *
-                                        Math.abs(_y - curY) *
-                                        Math.abs(_scale - curScale) *
-                                        Math.abs(_angle - curAngle)
-                                var list: MutableList<Match>? = votedPairs[curX][curY][curScale][curAngle]
-                                if (list == null) {
-                                    list = LinkedList()
-                                    votedPairs[curX][curY][curScale][curAngle] = list
-                                }
-                                list.add(pointsPair)
-                            }
-                        }
-                    }
-                }
-            }
-
-            private fun normalize(angle: Double): Double {
-                var angle = angle
-                while (angle < 0)
-                    angle += Math.PI * 2
-                while (angle >= Math.PI * 2)
-                    angle -= Math.PI * 2
-                return angle
-            }
-
-
-            fun maximums(objWidth: Int, objHeight: Int): List<List<Match>?> {
-                val lists = LinkedList<List<Match>?>()
-                for (i in 0 until n) {
-                    for (j in 0 until m) {
-                        for (k in 0 until this.k) {
-                            for (l in 0 until this.l) {
-                                val `val` = votes[i][j][k][l]
-                                if (votedPairs[i][j][k][l] == null || votedPairs[i][j][k][l]?.size!! < 4)
-                                    continue
-                                var ok = true
-                                var di = -1
-                                while (di <= 1 && ok) {
-                                    var dj = -1
-                                    while (dj <= 1 && ok) {
-                                        var dk = -1
-                                        while (dk <= 1 && ok) {
-                                            var dl = -1
-                                            while (dl <= 1 && ok) {
-                                                if (di == 0 && dj == 0 && dk == 0 && dl == 0) {
-                                                    dl++
-                                                    continue
-                                                }
-                                                val ni = (i + di + this.n) % this.n
-                                                val nj = (j + dj + this.m) % this.m
-                                                val nk = (k + dk + this.k) % this.k
-                                                val nl = (l + dl + this.l) % this.l
-                                                ok = `val` > votes[ni][nj][nk][nl]
-                                                dl++
-                                            }
-                                            dk++
-                                        }
-                                        dj++
-                                    }
-                                    di++
-                                }
-                                if (ok) {
-                                    println("$i $j $k $l")
-                                    val x = (i + 0.5) * widthBin
-                                    val y = (j + 0.5) * heightBin
-                                    val scale = (k + 0.5) * scaleBin
-                                    val coef = scale / objWidth
-                                    val w = objWidth * coef
-                                    val h = objHeight * coef
-                                    val angle = l * angleBin
-                                    lists.add(votedPairs[i][j][k][l])
-                                }
-                            }
-                        }
-                    }
-                }
-                return lists
-            }
-
-
-            private fun rotate(
-                point: Pair<Double, Double>,
-                center: Pair<Double, Double>,
-                angle: Double
-            ): Pair<Double, Double> {
-                val cos = Math.cos(angle)
-                val sin = Math.sin(angle)
-                val x = point.first - center.first
-                val y = point.second - center.second
-                val rx = x * cos - y * sin
-                val ry = x * sin + y * cos
-                return Pair(rx + center.first, ry + center.second)
-            }
+    private fun drawRect(graphics: Graphics2D, vararg points: Panorama.PanoramaPoint) {
+        for (i in 0 until points.size - 1) {
+            val j = i + 1
+            graphics.drawLine(
+                points[i].x.toInt(),
+                points[i].y.toInt(),
+                points[j].x.toInt(),
+                points[j].y.toInt()
+            )
         }
     }
+
+    private fun vote(x: Double, y: Double, scale: Double, angle: Double, match: Match) {
+        var angle = angle
+        if (x < 0 || x >= image!!.width || y < 0 || y >= image!!.height) return
+
+        while (angle < 0) angle += Math.PI * 2
+        while (angle >= Math.PI * 2) angle -= Math.PI * 2
+
+        val xPos = Math.floor(x / COORDINATE_STEP).toInt()
+        val yPos = Math.floor(y / COORDINATE_STEP).toInt()
+
+        val angleStep = Math.PI * 2 / ANGLE_CELLS
+        val aPos = Math.floor(angle / angleStep).toInt()
+
+        var sPos = nearestGeometricProgressionElement(SCALE_MINIMUM, SCALE_MULTIPLIER, scale)
+        if (scale < SCALE_MINIMUM * Math.pow(SCALE_MULTIPLIER, sPos.toDouble())) sPos--
+
+        if (sPos < 0) sPos = 0
+        if (sPos >= SCALE_CELLS) sPos = SCALE_CELLS - 1
+
+
+        val xDelta = x % COORDINATE_STEP / COORDINATE_STEP
+
+        val yDelta = y % COORDINATE_STEP / COORDINATE_STEP
+
+        val aDelta = angle % angleStep / angleStep
+
+        val scaleLeft = SCALE_MINIMUM * Math.pow(SCALE_MULTIPLIER, sPos.toDouble())
+        val scaleRight = SCALE_MINIMUM * Math.pow(SCALE_MULTIPLIER, (sPos + 1).toDouble())
+        val sDelta = (scale - scaleLeft) / (scaleRight - scaleLeft)
+
+
+        val d = listOf(
+            Pair(xPos, xDelta),
+            Pair(yPos, yDelta),
+            Pair(aPos, aDelta),
+            Pair(sPos, sDelta)
+        )
+
+        vote(d, 0, IntArray(d.size), DoubleArray(d.size), match)
+    }
+
+    private fun vote(
+        list: List<Pair<Int, Double>>, step: Int,
+        indices: IntArray, result: DoubleArray, match: Match
+    ) {
+        if (step == list.size) {
+            var value = 1.0
+            for (d in result) value *= d
+
+            vote(indices[0], indices[1], indices[2], indices[3], value, match)
+        } else {
+            val current = list[step]
+            val value = 1 - Math.abs(current.second - 0.5)
+
+            indices[step] = current.first
+            result[step] = value
+            vote(list, step + 1, indices, result, match)
+
+            indices[step] = current.first + if (current.second < 0.5) -1 else 1
+            result[step] = 1 - value
+            vote(list, step + 1, indices, result, match)
+        }
+    }
+
+    private fun vote(xPos: Int, yPos: Int, aPos: Int, sPos: Int, value: Double, match: Match) {
+        var aPos = aPos
+        if (xPos < 0 || xPos >= votes!!.size) return
+        if (yPos < 0 || yPos >= votes!![0].size) return
+        if (sPos < 0 || sPos >= SCALE_CELLS) return
+
+        if (aPos < 0) aPos += ANGLE_CELLS
+        if (aPos >= ANGLE_CELLS) aPos -= ANGLE_CELLS
+
+        votes!![xPos][yPos][aPos][sPos] += value
+
+        voters!![xPos][yPos][aPos][sPos].add(match)
+    }
+
+    private fun maximums(): List<List<Match?>> {
+        val lists = LinkedList<LinkedList<Match?>>()
+        for (i in 0 until cellsX) {
+            for (j in 0 until cellsY) {
+                for (k in 0 until ANGLE_CELLS) {
+                    for (l in 0 until SCALE_CELLS) {
+                        if (voters!![i][j][k][l].size < 4)
+                            continue
+                        val value = votes!![i][j][k][l]
+                        var ok = true
+                        var di = -1
+                        while (di <= 1 && ok) {
+                            if (i + di < 0 || i + di >= cellsX) {
+                                di++
+                                continue
+                            }
+                            var dj = -1
+                            while (dj <= 1 && ok) {
+                                if (j + dj < 0 || j + dj >= cellsY) {
+                                    dj++
+                                    continue
+                                }
+                                var dk = -1
+                                while (dk <= 1 && ok) {
+                                    if (k + dk < 0 || k + dk >= ANGLE_CELLS) {
+                                        dk++;
+                                        continue
+                                    }
+                                    var dl = -1
+                                    while (dl <= 1 && ok) {
+                                        if (di == 0 && dj == 0 && dk == 0 && dl == 0 || l + dl < 0 || l + dl >= SCALE_CELLS) {
+                                            dl++
+                                            continue
+                                        }
+                                        val ni = i + di
+                                        val nj = j + dj
+                                        val nk = k + dk
+                                        val nl = l + dl
+                                        ok = value >= votes!![ni][nj][nk][nl]
+                                        dl++
+                                    }
+                                    dk++
+                                }
+                                dj++
+                            }
+                            di++
+                        }
+                        if (ok) {
+                            lists.add(voters!![i][j][k][l])
+                        }
+                    }
+                }
+            }
+        }
+        return lists
+    }
+
+    private fun nearestGeometricProgressionElement(a: Double, q: Double, value: Double): Int {
+        val y = (Math.log(value) - Math.log(a)) / Math.log(q)
+        return Math.round(y).toInt()
+    }
+
+    companion object {
+
+        private val COORDINATE_STEP = 30
+        private val ANGLE_CELLS = 12
+
+        private val SCALE_MINIMUM = 1 / 4.0
+        private val SCALE_MULTIPLIER = 2.0
+        private val SCALE_CELLS = 4
+
+        fun find(image: GrayScaledImage, sample: GrayScaledImage, matching: List<Match>): BufferedImage {
+            val transform = ObjectDetector()
+            transform.image = image
+            transform.sample = sample
+            return transform.find(matching)
+        }
+    }
+
 }
