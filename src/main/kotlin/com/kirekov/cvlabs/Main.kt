@@ -131,14 +131,14 @@ fun octaves() = runBlocking {
         .forEach { it.delete() }
     Files.createDirectory(Paths.get("output"))
 
-    val bufferedImage1 = ImageIO.read(File("input/detect/set4/image.jpg"))
+    val bufferedImage1 = ImageIO.read(File("input/detect/set7/image.jpg"))
     val grayScaledImage1 = bufferedImageToGrayScaledImage(
         bufferedImage1,
         HdtvScaling(),
         MirrorPixelsHandler()
     )
 
-    val bufferedImage2 = ImageIO.read(File("input/detect/set4/object.png"))
+    val bufferedImage2 = ImageIO.read(File("input/detect/set7/object.jpg"))
     val grayScaledImage2 = bufferedImageToGrayScaledImage(
         bufferedImage2,
         HdtvScaling(),
@@ -219,7 +219,7 @@ fun octaves() = runBlocking {
     val result = ObjectDetector.find(grayScaledImage1, grayScaledImage2, matches)
 
     ImageIO.write(
-        result, "jpg", File("detector4.jpg")
+        result, "jpg", File("detector7.jpg")
     )
 
 /*
